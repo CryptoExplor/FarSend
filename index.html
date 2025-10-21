@@ -262,17 +262,17 @@
         (async () => {
             // --- CONSTANTS & CONFIGURATION ---
             const { ethers, CryptoJS } = window;
-            const BASE_CHAIN_ID = '0x8453'; // Base Mainnet
+            const BASE_CHAIN_ID = '8453'; // Base Mainnet
             const BASE_EXPLORER_URL = 'https://basescan.org';
 
             // MOCK/EXAMPLE CONTRACT: A simple MultiSend/Disperse clone contract on Base
             // NOTE: Use a verified contract address and ABI for production. For testing, deploy your own via Remix.
-            const MOCK_BATCH_SENDER_ADDRESS = '0x000000000000000000000000000000000000d056'; // Placeholder - REPLACE WITH REAL DEPLOYED ADDRESS!
+            const MOCK_BATCH_SENDER_ADDRESS = '0x8878b70a01bdda92ab8ea48dd7893b64c69298c0'; // Placeholder - REPLACE WITH REAL DEPLOYED ADDRESS!
             
             // Minimal ABI for a MultiSend/Disperse contract (extend for real FHE if using fhEVM)
             const BATCH_SENDER_ABI = [
-                "function multiSendEth(address[] calldata recipients, uint256[] calldata values, bytes calldata data) external payable",
-                "function multiSendToken(address token, address[] calldata recipients, uint256[] calldata values, bytes calldata data) external"
+                "function disperseEther(address[] calldata recipients, uint256[] calldata values, bytes calldata data) external payable",
+                "function disperseToken(address token, address[] calldata recipients, uint256[] calldata values, bytes calldata data) external"
             ];
             
             // Minimal ABI for ERC-20 interaction
