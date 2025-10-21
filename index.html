@@ -265,15 +265,19 @@
             const BASE_CHAIN_ID = '8453'; // Base Mainnet
             const BASE_EXPLORER_URL = 'https://basescan.org';
 
-            // MOCK/EXAMPLE CONTRACT: A simple MultiSend/Disperse clone contract on Base
-            // NOTE: Use a verified contract address and ABI for production. For testing, deploy your own via Remix.
-            const MOCK_BATCH_SENDER_ADDRESS = '0x8878b70a01bdda92ab8ea48dd7893b64c69298c0'; // Placeholder - REPLACE WITH REAL DEPLOYED ADDRESS!
-            
-            // Minimal ABI for a MultiSend/Disperse contract (extend for real FHE if using fhEVM)
-            const BATCH_SENDER_ABI = [
-                "function disperseEther(address[] calldata recipients, uint256[] calldata values, bytes calldata data) external payable",
-                "function disperseToken(address token, address[] calldata recipients, uint256[] calldata values, bytes calldata data) external"
-            ];
+            // Load Base Contract Config
+            let CONTRACT_ADDRESS, CONTRACT_ABI;
+            try {
+                const res = await fetch('base.json');
+                if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch base.json`);
+                const cfg = await res.json();
+                CONTRACT_ADDRESS = cfg.address;
+                CONTRACT_ABI = cfg.abi;
+                console.log('✅ Loaded BaseBatchSender:', CONTRACT_ADDRESS);
+            } catch (e) {
+                console.error('❌ Failed loading base.json:', e);
+                // Proceed with error handling in dispatch
+            }
             
             // Minimal ABI for ERC-20 interaction
             const ERC20_ABI = [
@@ -392,7 +396,7 @@
 
             // Client-side encryption POC (Simplified AES for metadata; real FHE would use Zama SDK)
             function encryptRecipients(recipients) {
-                const dataString = JSON.stringify(recipients.map(r => ({
+                const dataString = JSON.stringify(recipient => (r => ({
                     a: r.address.toLowerCase(), // address
                     v: r.amount.toString(),     // value
                 })));
@@ -456,7 +460,11 @@
                     await checkAndSwitchChain(); // Ensure we are on Base
 
                     state.signer = await state.provider.getSigner();
-                    state.batchContract = new ethers.Contract(MOCK_BATCH_SENDER_ADDRESS, BATCH_SENDER_ABI, state.signer);
+                    if (CONTRACT_ADDRESS && CONTRACT_ABI) {
+                        state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
+                    } else {
+                        throw new Error('Contract configuration not loaded. Please refresh the page.');
+                    }
 
                     state.isWalletConnected = true;
                     const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
@@ -564,7 +572,7 @@
 
             async function checkAndPromptApproval() {
                 // If not an ERC20 token, no approval needed
-                if (state.token !== 'ERC20' || !state.tokenInfo.contract) {
+                if (state.token !== 'ERC20' || !state.tokenInfo.contract || !CONTRACT_ADDRESS) {
                     approvalSection.classList.add('hidden');
                     return true;
                 }
@@ -576,7 +584,7 @@
                 state.tokenInfo.requiredAllowance = totalAmountBN;
                 
                 try {
-                    const allowance = await state.tokenInfo.contract.allowance(state.walletAddress, MOCK_BATCH_SENDER_ADDRESS);
+                    const allowance = await state.tokenInfo.contract.allowance(state.walletAddress, CONTRACT_ADDRESS);
                     state.tokenInfo.allowance = allowance;
 
                     if (allowance >= totalAmountBN) {
@@ -602,6 +610,10 @@
             }
 
             async function handleApprove() {
+                if (!CONTRACT_ADDRESS) {
+                    showNotification('Contract address not loaded. Please refresh.', 'error');
+                    return;
+                }
                 approveBtn.disabled = true;
                 approveBtn.innerHTML = 'Approving...';
                 
@@ -612,7 +624,7 @@
                     showNotification(`Requesting approval for total batch amount of ${ethers.formatUnits(amountToApprove, state.tokenInfo.decimals)} ${state.tokenInfo.symbol}...`, 'info');
                     
                     const contractWithSigner = state.tokenInfo.contract.connect(state.signer);
-                    const tx = await contractWithSigner.approve(MOCK_BATCH_SENDER_ADDRESS, amountToApprove);
+                    const tx = await contractWithSigner.approve(CONTRACT_ADDRESS, amountToApprove);
                     
                     showNotification(`Approval transaction sent. Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: var(--fc-primary-hover);">View Tx</a>`, 'info');
                     
@@ -640,68 +652,70 @@
 
             async function handleDispatch() {
                 if (!state.signer) return showNotification('Wallet not connected.', 'error');
+                if (!state.batchContract || !CONTRACT_ADDRESS) return showNotification('Batch contract not loaded. Please refresh the page.', 'error');
 
                 dispatchBtn.disabled = true;
                 loadingSpinner.classList.remove('hidden');
                 dispatchBtnText.textContent = 'Preparing batch...';
                 document.getElementById('shieldIcon').classList.add('hidden');
 
-                const { recipients, token, tokenInfo, batchContract, signer } = state;
+                const { recipients, token, tokenInfo, batchContract, signer, walletAddress } = state;
 
                 try {
-                    if (token === 'ERC20') {
-                        // 1. ERC-20 Approval Check (Final check before sending)
-                        const isApproved = await checkAndPromptApproval();
-                        if (!isApproved) {
-                            showNotification('Insufficient allowance. Please approve the token first.', 'error');
-                            return;
+                    if (recipients.length === 0) throw new Error('No recipients defined');
+
+                    // Pre-flight checks
+                    const decimals = token === 'ETH' ? 18 : tokenInfo.decimals;
+                    const rawAmounts = recipients.map(r => r.amount.toString());
+                    const amounts = rawAmounts.map(a => ethers.parseUnits(a, decimals));
+                    const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
+
+                    if (token === 'ETH') {
+                        const balance = await state.provider.getBalance(walletAddress);
+                        if (totalAmountBN > balance) {
+                            const required = ethers.formatEther(totalAmountBN);
+                            const available = ethers.formatEther(balance);
+                            throw new Error(`Insufficient ETH balance. Required: ${required} ETH, Available: ${available} ETH`);
+                        }
+                    } else {
+                        if (!tokenInfo.contract) throw new Error('Token contract not initialized');
+                        const allowance = await tokenInfo.contract.allowance(walletAddress, CONTRACT_ADDRESS);
+                        if (allowance < totalAmountBN) {
+                            const required = ethers.formatUnits(totalAmountBN, decimals);
+                            const avail = ethers.formatUnits(allowance, decimals);
+                            throw new Error(`Insufficient allowance for ${tokenInfo.symbol}. Required: ${required}, Current: ${avail}`);
                         }
                     }
 
-                    // 2. FHE/Privacy Layer (POC) - Encrypt metadata before calldata
-                    dispatchBtnText.textContent = 'Encrypting data (POC)...';
-                    const encryptedData = encryptRecipients(recipients);
-                    
-                    // Prepare data for the smart contract call
-                    const recipientAddresses = recipients.map(r => r.address);
-                    let recipientAmounts = recipients.map(r => ethers.parseUnits(r.amount.toString(), tokenInfo.decimals || 18));
+                    // ERC-20 Approval Check (Final check before sending)
+                    if (token === 'ERC20') {
+                        const isApproved = await checkAndPromptApproval();
+                        if (!isApproved) {
+                            throw new Error('Token approval required. Please approve before dispatching.');
+                        }
+                    }
 
-                    let tx;
-                    let totalValue = 0n;
-                    
+                    // Send transaction
                     dispatchBtnText.textContent = 'Requesting transaction signature...';
+                    let tx;
+                    const recipientAddresses = recipients.map(r => r.address);
 
                     if (token === 'ETH') {
-                        // ETH Transfer: Requires total value to be sent with the transaction
-                        totalValue = recipientAmounts.reduce((sum, amount) => sum + amount, 0n);
-                        
-                        tx = await batchContract.multiSendEth(
-                            recipientAddresses,
-                            recipientAmounts,
-                            ethers.toUtf8Bytes(encryptedData), // Encrypted data as optional bytes argument (for off-chain verification)
-                            { value: totalValue }
-                        );
-
-                    } else { // ERC20 Transfer
-                        // ERC-20 Transfer: Value is 0, the contract spends the approved allowance
-                        tx = await batchContract.multiSendToken(
-                            tokenInfo.address,
-                            recipientAddresses,
-                            recipientAmounts,
-                            ethers.toUtf8Bytes(encryptedData) // Encrypted data as optional bytes argument
-                        );
+                        const totalValue = totalAmountBN;
+                        tx = await batchContract.disperseEther(recipientAddresses, amounts, { value: totalValue });
+                    } else {
+                        tx = await batchContract.disperseToken(tokenInfo.address, recipientAddresses, amounts);
                     }
                     
-                    // 3. Transaction Feedback
+                    // Transaction Feedback
                     showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: var(--fc-primary-hover);">View Tx</a>`, 'info');
 
-                    // 4. Wait for confirmation
+                    // Wait for confirmation
                     const receipt = await tx.wait();
 
                     if (receipt.status === 1) {
                          const message = `✅ Success! Batch of ${recipients.length} transfers confirmed.<br>
-                            <a href="${BASE_EXPLORER_URL}/tx/${receipt.hash}" target="_blank" class="font-bold underline" style="color: var(--fc-primary-hover);">View on BaseScan</a><br>
-                            <span class="text-xs text-blue-700 block mt-2">FHE POC Ciphertext: ${encryptedData.substring(0, 40)}... (Decrypt locally for audit)</span>`;
+                            <a href="${BASE_EXPLORER_URL}/tx/${receipt.hash}" target="_blank" class="font-bold underline" style="color: var(--fc-primary-hover);">View on BaseScan</a>`;
                         showNotification(message, 'success');
                         
                         // Reset form
@@ -709,14 +723,50 @@
                         parseAndValidateData('', 'text');
 
                     } else {
-                        // Transaction failed/reverted on chain
-                        showNotification(`Transaction failed on chain. Hash: ${receipt.hash}. Please check BaseScan for details.`, 'error');
+                        throw new Error('Transaction reverted on chain. Please check BaseScan for details.');
                     }
 
                 } catch (error) {
-                    // Handle user rejection, gas errors, etc.
-                    console.error('Dispatch failed:', error);
-                    const msg = error.code === 'ACTION_REJECTED' ? 'Transaction rejected by user.' : `Dispatch error: ${error.shortMessage || error.message.substring(0, 150)}`;
+                    console.error('Dispatch error:', error);
+                    let reason = error.message || 'Unknown error';
+                    // Decode revert reason if present
+                    if (error.reason) {
+                        reason = error.reason;
+                    } else if (error.data) {
+                        try {
+                            const hexData = error.data.startsWith('0x') ? error.data : '0x' + error.data;
+                            const iface = new ethers.Interface(CONTRACT_ABI);
+                            const decoded = iface.parseError(hexData);
+                            if (decoded) {
+                                reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
+                            } else {
+                                // Fallback to string decode for Error(string)
+                                const revertSelector = '0x08c379a0';
+                                if (hexData.startsWith(revertSelector)) {
+                                    const stringData = hexData.slice(10);
+                                    reason = ethers.toUtf8String('0x' + stringData);
+                                }
+                            }
+                        } catch (decodeErr) {
+                            console.error('Revert decode failed:', decodeErr);
+                        }
+                    } else if (error.error?.data) {
+                        try {
+                            const data = error.error.data;
+                            const hexData = data.startsWith('0x') ? data : '0x' + data.slice(2 || data);
+                            const iface = new ethers.Interface(CONTRACT_ABI);
+                            const decoded = iface.parseError(hexData);
+                            if (decoded) {
+                                reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
+                            } else if (hexData.startsWith('0x08c379a0')) {
+                                const stringData = hexData.slice(10);
+                                reason = ethers.toUtf8String('0x' + stringData);
+                            }
+                        } catch (decodeErr) {
+                            console.error('Revert decode failed:', decodeErr);
+                        }
+                    }
+                    const msg = error.code === 'ACTION_REJECTED' ? 'Transaction rejected by user.' : `Dispatch failed: ${reason}`;
                     showNotification(msg, 'error');
                 } finally {
                     loadingSpinner.classList.add('hidden');
@@ -807,7 +857,7 @@
                 
                 let isReady = false;
                 
-                if (count > 0 && total > 0 && state.isWalletConnected) {
+                if (count > 0 && total > 0 && state.isWalletConnected && state.batchContract) {
                     if (state.token === 'ERC20') {
                         const isValidToken = state.tokenInfo.address && state.tokenInfo.symbol !== 'ETH';
                         if (isValidToken) {
@@ -930,7 +980,7 @@
                 updateSummary();
             });
 
-            recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
+            recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientTextarea.value, 'text'));
             csvUpload.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
