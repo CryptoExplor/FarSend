@@ -395,8 +395,8 @@
             }
 
             // Client-side encryption POC (Simplified AES for metadata; real FHE would use Zama SDK)
-            function encryptRecipients(recipients) {
-                const dataString = JSON.stringify(recipient => (r => ({
+            function encryptRecipients(recipient) {
+                const dataString = JSON.stringify(recipients.map(r => ({
                     a: r.address.toLowerCase(), // address
                     v: r.amount.toString(),     // value
                 })));
@@ -980,7 +980,7 @@
                 updateSummary();
             });
 
-            recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientTextarea.value, 'text'));
+            recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
             csvUpload.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
