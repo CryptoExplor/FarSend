@@ -580,14 +580,13 @@
                   const connectorsToTry = wagmiConfig.connectors;
                   let prioritizedConnectors = [];
 
-                  const injectedConnector = connectorsToTry.find(c => c.id === 'injected');
                   const farcasterConnector = connectorsToTry.find(c => c.id === 'farcasterMiniApp');
+                  const injectedConnector = connectorsToTry.find(c => c.id === 'injected');
                   const wcConnector = connectorsToTry.find(c => c.id === 'walletConnect');
 
                   if (isMiniApp) {
                       // Farcaster environment: Try Farcaster first, then Injected (if any), then WC
                       if (farcasterConnector) prioritizedConnectors.push(farcasterConnector);
-                      if (injectedConnector) prioritizedConnectors.push(injectedConnector);
                   } else {
                       // Browser environment: Try Injected first, then WC
                       if (injectedConnector) prioritizedConnectors.push(injectedConnector);
