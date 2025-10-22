@@ -276,12 +276,11 @@
 
     <!-- AppKit Initialization -->
     <script type="module">
-        import { createAppKit } from 'https://unpkg.com/@reown/appkit@latest/dist/index.es.js';
-        import { EthersAdapter } from 'https://unpkg.com/@reown/appkit-adapter-ethers@latest/dist/index.es.js';
-        import { base } from 'https://unpkg.com/@reown/appkit-networks@latest/dist/index.es.js';
+        import { createAppKit } from 'https://unpkg.com/@reown/appkit@1.7.19/dist/index.es.js';
+        import { EthersAdapter } from 'https://unpkg.com/@reown/appkit-adapter-ethers@1.7.19/dist/index.es.js';
+        import { base } from 'https://unpkg.com/@reown/appkit-networks@1.7.19/dist/index.es.js';
 
-        const projectId = 'e0dd881bad824ac3418617434a79f917'; // Replace with your Reown (WalletConnect) Project ID from https://dashboard.reown.com
-        // Note: No separate AppKit auth API key is required; the projectId handles authentication.
+        const projectId = 'e0dd881bad824ac3418617434a79f917'; // Your Reown (WalletConnect) Project ID
 
         const metadata = {
             name: 'FarSend',
@@ -325,7 +324,7 @@
             }
             if (typeof window.modal === 'undefined') {
                 console.error('AppKit modal not initialized');
-                document.getElementById('connectWalletBtn').innerHTML = '<span style="color: red;">Error: AppKit failed to load. Please refresh and check Project ID.</span>';
+                document.getElementById('connectWalletBtn').innerHTML = '<span style="color: red;">Error: AppKit failed to load. Please verify your Project ID on https://dashboard.reown.com and refresh.</span>';
                 return;
             }
 
@@ -495,7 +494,7 @@
                 }
 
                 // Client-side encryption POC (Simplified AES for metadata; real FHE would use Zama SDK)
-                function encryptRecipients(recipient) {
+                function encryptRecipients(recipients) {
                     const dataString = JSON.stringify(recipients.map(r => ({
                         a: r.address.toLowerCase(), // address
                         v: r.amount.toString(),     // value
@@ -1064,7 +1063,7 @@
                     updateSummary();
                 });
 
-                recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
+                recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientTextarea.value, 'text'));
                 csvUpload.addEventListener('change', (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
