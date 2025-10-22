@@ -6,9 +6,11 @@
     <title>FarSend - Private Batch Sender</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Ethers.js for wallet and contract interaction -->
-    <script src="https://cdn.jsdelivr.net/npm/ethers@6.11.1/dist/ethers.umd.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/ethers@6.11.1/dist/ethers.umd.min.js"></script>
     <!-- Crypto-JS for FHE Proof-of-Concept (client-side encryption) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <!-- Canvas Confetti for celebrations -->
+    <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,8 +18,8 @@
     <style>
         /* Define Farcaster Primary Color */
         :root {
-            --fc-primary: #6A3CFF;
-            --fc-primary-hover: #582FD6;
+            --fc-primary: linear-gradient(90deg, #6A3CFF, #A26BFF);
+            --fc-primary-hover: linear-gradient(90deg, #582FD6, #8B5CF6);
             --fc-light-bg: #F3EFFF;
             --fc-text: #1F2937; /* Gray 800 */
         }
@@ -34,12 +36,13 @@
         }
 
         .btn-primary {
-            background-color: var(--fc-primary);
+            background: var(--fc-primary);
             box-shadow: 0 4px 15px rgba(106, 60, 255, 0.4);
             color: white;
         }
         .btn-primary:hover {
-            background-color: var(--fc-primary-hover);
+            background: var(--fc-primary-hover);
+            box-shadow: 0 0 12px rgba(162, 107, 255, 0.6);
         }
         .btn-primary:disabled {
             background: #E5E7EB;
@@ -51,15 +54,16 @@
         
         /* Focus/Active styles */
         .input-focus:focus {
-             border-color: var(--fc-primary) !important;
-             box-shadow: 0 0 0 3px rgba(106, 60, 255, 0.2) !important;
+             border-color: #6A3CFF !important;
+             box-shadow: 0 0 12px rgba(106, 60, 255, 0.4) !important;
+             transition: box-shadow 0.2s ease;
         }
 
         /* Custom scrollbar */
         textarea::-webkit-scrollbar, .overflow-auto::-webkit-scrollbar { width: 8px; }
         textarea::-webkit-scrollbar-track, .overflow-auto::-webkit-scrollbar-track { background: #F3F4F6; }
-        textarea::-webkit-scrollbar-thumb, .overflow-auto::-webkit-scrollbar-thumb { background: var(--fc-primary); border-radius: 10px; }
-        textarea::-webkit-scrollbar-thumb:hover, .overflow-auto::-webkit-scrollbar-thumb:hover { background: var(--fc-primary-hover); }
+        textarea::-webkit-scrollbar-thumb, .overflow-auto::-webkit-scrollbar-thumb { background: #6A3CFF; border-radius: 10px; }
+        textarea::-webkit-scrollbar-thumb:hover, .overflow-auto::-webkit-scrollbar-thumb:hover { background: #582FD6; }
 
         /* Notification Toast styles */
         #notification {
@@ -76,6 +80,21 @@
             opacity: 1;
             transform: translateX(-50%) translateY(0);
         }
+
+        /* Animated Gradient Header */
+        @keyframes gradient-x {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        .animate-gradient-x {
+          background-size: 200% 200%;
+          animation: gradient-x 6s ease infinite;
+        }
+
+        /* Stepper Progress Bar */
+        #stepIndicator .flex-1.h-0\.5.bg-gray-200.mt-4.mx-2 {
+          background: var(--fc-primary);
+        }
     </style>
 </head>
 <body class="text-gray-900 min-h-screen flex items-center justify-center p-4">
@@ -84,7 +103,7 @@
         <!-- Header -->
         <header class="text-center mb-8">
             <div class="flex justify-center items-center mb-2">
-                <h1 class="text-5xl font-extrabold tracking-tight" style="color: var(--fc-primary);">FarSend</h1>
+                <h1 class="text-5xl font-extrabold tracking-tight bg-gradient-to-r from-[#6A3CFF] via-[#A26BFF] to-[#00E7FF] text-transparent bg-clip-text animate-gradient-x">FarSend</h1>
             </div>
             <p class="text-gray-600 mt-2">Send ETH & ERC-20s to multiple addresses, securely on Base.</p>
         </header>
@@ -95,10 +114,10 @@
             <!-- Progress Stepper UI Component -->
             <div id="stepIndicator" class="flex justify-between items-start mb-8 pb-4 border-b border-gray-100">
                 <div class="flex flex-col items-center flex-1 min-w-0">
-                    <div id="stepCircle1" class="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 ring-4 ring-opacity-50" style="background-color: var(--fc-primary); color: white; border-color: var(--fc-primary); ring-color: var(--fc-primary);">
+                    <div id="stepCircle1" class="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 ring-4 ring-opacity-50" style="background-color: #6A3CFF; color: white; border-color: #6A3CFF; ring-color: #6A3CFF;">
                         <span class="font-bold">1</span>
                     </div>
-                    <span id="stepLabel1" class="text-xs mt-2 text-center font-semibold" style="color: var(--fc-primary);">Connect Wallet</span>
+                    <span id="stepLabel1" class="text-xs mt-2 text-center font-semibold" style="color: #6A3CFF;">Connect Wallet</span>
                 </div>
                 <div class="flex-1 h-0.5 bg-gray-200 mt-4 mx-2"></div>
                 
@@ -169,8 +188,8 @@
                         <textarea id="recipients" rows="6" class="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm input-focus outline-none transition duration-150 text-gray-900" placeholder="Enter one address and amount per line, separated by a comma or space.&#10;e.g.,&#10;0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B, 1.5&#10;0x5B38Da6a701c568545dCfcB03FcB875f56beddC4 10.75"></textarea>
                         
                         <div class="flex justify-end text-xs text-gray-500 mt-2 space-x-4">
-                             <a href="#" id="exportListBtn" class="cursor-pointer font-medium hover:underline" style="color: var(--fc-primary);">Export List (.csv)</a>
-                            <span>Or, <label for="csvUpload" class="cursor-pointer font-medium hover:underline" style="color: var(--fc-primary);">upload a file</label></span>
+                             <a href="#" id="exportListBtn" class="cursor-pointer font-medium hover:underline" style="color: #6A3CFF;">Export List (.csv)</a>
+                            <span>Or, <label for="csvUpload" class="cursor-pointer font-medium hover:underline" style="color: #6A3CFF;">upload a file</label></span>
                             <input type="file" id="csvUpload" class="hidden" accept=".csv, .txt, .json">
                         </div>
                     </div>
@@ -239,15 +258,15 @@
                         <div id="loadingSpinner" class="hidden animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                     </button>
                     <p class="text-xs text-center text-gray-500 mt-2">Transaction data is protected by a client-side encryption Proof-of-Concept.</p>
-                    <p class="text-xs text-center text-gray-500 mt-2">Privacy: Standard transparency (public on-chain). FHE privacy layer coming Q1 2026 when Zama Protocol expands to Base. Try Zama FHE Sepolia testnet <a href="https://farsend.vercel.app/sepolia" target="_blank" class="underline" style="color: var(--fc-primary);">here</a>.</p>
+                    <p class="text-xs text-center text-gray-500 mt-2">Privacy: Standard transparency (public on-chain). FHE privacy layer coming Q1 2026 when Zama Protocol expands to Base. Try Zama FHE Sepolia testnet <a href="https://farsend.vercel.app/sepolia" target="_blank" class="underline" style="color: #6A3CFF;">here</a>.</p>
                 </div>
             </div>
         </main>
         
         <!-- Footer -->
-        <footer class="text-center text-gray-500 text-sm mt-8">
+        <footer class="text-center text-sm mt-8 bg-gradient-to-r from-[#6A3CFF] to-[#A26BFF] text-white p-4 rounded-lg shadow-md">
             <p>Built for the Farcaster + Base ecosystem.</p>
-            <p><a href="https://farcaster.xyz/dare1.eth" target="_blank" class="underline" style="color: var(--fc-primary);">dare1.eth</a></p>
+            <p><a href="https://farcaster.xyz/dare1.eth" target="_blank" class="underline">dare1.eth</a></p>
             <p>&copy; 2025 FarSend</p>
         </footer>
     </div>
@@ -263,18 +282,33 @@
             const BASE_CHAIN_ID = '8453'; // Base Mainnet
             const BASE_EXPLORER_URL = 'https://basescan.org';
 
-            // Load Base Contract Config
+            // Load Base Contract Config (with localStorage caching)
             let CONTRACT_ADDRESS, CONTRACT_ABI;
-            try {
-                const res = await fetch('base.json');
-                if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch base.json`);
-                const cfg = await res.json();
-                CONTRACT_ADDRESS = cfg.address;
-                CONTRACT_ABI = cfg.abi;
-                console.log('✅ Loaded BaseBatchSender:', CONTRACT_ADDRESS);
-            } catch (e) {
-                console.error('❌ Failed loading base.json:', e);
-                // Proceed with error handling in dispatch
+            const cacheKey = 'farsend-base-config';
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                try {
+                    const cfg = JSON.parse(cached);
+                    CONTRACT_ADDRESS = cfg.address;
+                    CONTRACT_ABI = cfg.abi;
+                    console.log('✅ Loaded BaseBatchSender from cache:', CONTRACT_ADDRESS);
+                } catch (e) {
+                    console.warn('Cache invalid, fetching fresh config');
+                }
+            }
+            if (!CONTRACT_ADDRESS) {
+                try {
+                    const res = await fetch('base.json');
+                    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch base.json`);
+                    const cfg = await res.json();
+                    CONTRACT_ADDRESS = cfg.address;
+                    CONTRACT_ABI = cfg.abi;
+                    localStorage.setItem(cacheKey, JSON.stringify(cfg));
+                    console.log('✅ Loaded BaseBatchSender:', CONTRACT_ADDRESS);
+                } catch (e) {
+                    console.error('❌ Failed loading base.json:', e);
+                    // Proceed with error handling in dispatch
+                }
             }
             
             // Minimal ABI for ERC-20 interaction
@@ -333,7 +367,8 @@
             // --- HELPER FUNCTIONS ---
 
             function showNotification(message, type = 'success') {
-                notification.innerHTML = message;
+                const icons = { success: '✅', error: '❌', info: '💡' };
+                notification.innerHTML = `${icons[type] || ''} ${message}`;
                 notification.className = 'p-4 rounded-lg text-sm main-card shadow-lg show'; 
                 
                 if (type === 'success') {
@@ -370,17 +405,17 @@
                     labelEl.className = 'text-xs mt-2 text-center transition-colors duration-300';
                     
                     if (isActive) {
-                        stepEl.style.backgroundColor = 'var(--fc-primary)';
+                        stepEl.style.backgroundColor = '#6A3CFF';
                         stepEl.style.color = 'white';
                         stepEl.classList.add('ring-4', 'ring-opacity-50');
-                        stepEl.style.setProperty('ring-color', 'var(--fc-primary)');
+                        stepEl.style.setProperty('ring-color', '#6A3CFF');
                         labelEl.classList.add('font-semibold');
-                        labelEl.style.color = 'var(--fc-primary)';
+                        labelEl.style.color = '#6A3CFF';
                     } else if (isCompleted) {
                         stepEl.style.backgroundColor = 'var(--fc-light-bg)';
-                        stepEl.style.color = 'var(--fc-primary)';
+                        stepEl.style.color = '#6A3CFF';
                         stepEl.classList.remove('ring-4', 'ring-opacity-50');
-                        labelEl.style.color = 'var(--fc-primary-hover)';
+                        labelEl.style.color = '#582FD6';
                         labelEl.classList.add('font-medium');
                     } else {
                         stepEl.style.backgroundColor = '#E5E7EB';
@@ -393,7 +428,7 @@
             }
 
             // Client-side encryption POC (Simplified AES for metadata; real FHE would use Zama SDK)
-            function encryptRecipients(recipients) {
+            function encryptRecipients(recipient) {
                 const dataString = JSON.stringify(recipients.map(r => ({
                     a: r.address.toLowerCase(), // address
                     v: r.amount.toString(),     // value
@@ -446,7 +481,7 @@
                 }
 
                 connectWalletBtn.disabled = true;
-                connectWalletBtn.innerHTML = `<span>Connecting...</span>`;
+                connectWalletBtn.innerHTML = `<span class="animate-pulse text-purple-700 font-bold">Connecting...</span>`;
                 
                 try {
                     state.provider = new ethers.BrowserProvider(window.ethereum);
@@ -624,7 +659,7 @@
                     const contractWithSigner = state.tokenInfo.contract.connect(state.signer);
                     const tx = await contractWithSigner.approve(CONTRACT_ADDRESS, amountToApprove);
                     
-                    showNotification(`Approval transaction sent. Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: var(--fc-primary-hover);">View Tx</a>`, 'info');
+                    showNotification(`Approval transaction sent. Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
                     
                     await tx.wait(); // Wait for 1 confirmation
                     
@@ -706,15 +741,20 @@
                     }
                     
                     // Transaction Feedback
-                    showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: var(--fc-primary-hover);">View Tx</a>`, 'info');
+                    showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
 
                     // Wait for confirmation
                     const receipt = await tx.wait();
 
                     if (receipt.status === 1) {
                          const message = `✅ Success! Batch of ${recipients.length} transfers confirmed.<br>
-                            <a href="${BASE_EXPLORER_URL}/tx/${receipt.hash}" target="_blank" class="font-bold underline" style="color: var(--fc-primary-hover);">View on BaseScan</a>`;
+                            <a href="${BASE_EXPLORER_URL}/tx/${receipt.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on BaseScan</a>`;
                         showNotification(message, 'success');
+                        
+                        // Confetti celebration
+                        if (window.confetti) {
+                            window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                        }
                         
                         // Reset form
                         recipientsTextarea.value = '';
@@ -947,6 +987,8 @@
             });
 
             tokenSelect.addEventListener('change', () => {
+                tokenSelect.classList.add('animate-bounce');
+                setTimeout(() => tokenSelect.classList.remove('animate-bounce'), 400);
                 state.token = tokenSelect.value;
                 if (state.token === 'ERC20') {
                     erc20InputContainer.classList.remove('hidden');
@@ -978,7 +1020,7 @@
                 updateSummary();
             });
 
-            recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
+            recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientTextarea.value, 'text'));
             csvUpload.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
