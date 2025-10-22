@@ -276,33 +276,30 @@
 
     <!-- AppKit Initialization -->
     <script type="module">
-        import { createAppKit } from 'https://unpkg.com/@reown/appkit@1.7.19/dist/index.es.js';
-        import { EthersAdapter } from 'https://unpkg.com/@reown/appkit-adapter-ethers@1.7.19/dist/index.es.js';
-        import { base } from 'https://unpkg.com/@reown/appkit-networks@1.7.19/dist/index.es.js';
+        import { createAppKit } from 'https://unpkg.com/@reown/appkit@1.7.13/dist/esm/index.js';
+        import { EthersAdapter } from 'https://unpkg.com/@reown/appkit-adapter-ethers@1.7.13/dist/esm/index.js';
+        import { base } from 'https://unpkg.com/@reown/appkit@1.7.13/dist/esm/networks/index.js';
 
-        const projectId = 'e0dd881bad824ac3418617434a79f917'; // Your Reown (WalletConnect) Project ID
+        const projectId = 'e0dd881bad824ac3418617434a79f917';
 
         const metadata = {
             name: 'FarSend',
             description: 'Private Batch Sender on Base',
             url: window.location.origin,
-            icons: ['https://farsend.vercel.app/icon.png'] // Add your app icon URL
+            icons: ['https://farsend.vercel.app/icon.png']
         };
 
         const networks = [base];
 
-        const adapter = new EthersAdapter({
-            projectId,
-            networks
-        });
+        const ethersAdapter = new EthersAdapter();
 
         const modal = createAppKit({
-            adapters: [adapter],
+            adapters: [ethersAdapter],
             networks,
             metadata,
             projectId,
             features: {
-                analytics: true // Optional
+                analytics: true
             }
         });
 
@@ -361,7 +358,6 @@
                         console.log('✅ Loaded BaseBatchSender:', CONTRACT_ADDRESS);
                     } catch (e) {
                         console.error('❌ Failed loading base.json:', e);
-                        // Proceed with error handling in dispatch
                     }
                 }
                 
@@ -433,7 +429,7 @@
                         notification.style.backgroundColor = '#fee2e2';
                         notification.style.color = '#991b1b';
                         notification.style.border = '1px solid #f87171';
-                    } else { // info/loading
+                    } else {
                         notification.style.backgroundColor = '#DBEAFE';
                         notification.style.color = '#1E40AF';
                         notification.style.border = '1px solid #93C5FD';
@@ -493,28 +489,7 @@
                     updateStepIndicator(2);
                 }
 
-                // Client-side encryption POC (Simplified AES for metadata; real FHE would use Zama SDK)
-                function encryptRecipients(recipients) {
-                    const dataString = JSON.stringify(recipients.map(r => ({
-                        a: r.address.toLowerCase(), // address
-                        v: r.amount.toString(),     // value
-                    })));
-                    
-                    // NOTE: In a real FHE scenario, this key would be managed off-chain or by a trusted third party.
-                    // For this POC, we use a simple, fixed key. Replace with dynamic key derivation for security.
-                    const secretKey = 'farsend-private-key-poc'; 
-                    
-                    const ciphertext = CryptoJS.AES.encrypt(dataString, secretKey).toString();
-                    return ciphertext;
-                }
-
                 // --- WEB3 CORE LOGIC ---
-
-                async function checkAndSwitchChain() {
-                    // AppKit enforces the configured networks, so chain switch is handled in modal
-                    // If needed, open network modal: modal.open({ view: 'Networks' });
-                    console.log('Chain check: AppKit handles network selection');
-                }
 
                 async function handleConnect() {
                     if (state.isWalletConnected) {
@@ -531,7 +506,6 @@
                     
                     try {
                         await modal.open();
-                        // Connection handled by subscribeEvents
                     } catch (error) {
                         console.error('Connection error:', error);
                         showNotification(`Wallet connection failed: ${error.message.substring(0, 100)}`, 'error');
@@ -549,7 +523,6 @@
                     state.signer = null;
                     state.batchContract = null;
                     
-                    // Reset token info
                     state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
                     erc20Address.value = '';
                     tokenSymbolDisplay.textContent = '';
@@ -566,54 +539,62 @@
                     updateStepIndicator(1);
                 }
 
-                // Subscribe to AppKit events
-                modal.subscribeEvents(async (payload) => {
-                    const { type, params } = payload;
-                    switch (type) {
-                        case 'CONNECT_SUCCESS':
-                            const { chainId, address } = params;
-                            if (parseInt(chainId, 16) !== BASE_CHAIN_ID) {
-                                showNotification('Please select Base network in the modal.', 'error');
-                                await modal.open({ view: 'Networks' });
-                                return;
-                            }
-                            state.walletAddress = ethers.getAddress(address);
-                            const provider = await modal.getProvider({ chainId: BASE_CHAIN_ID });
-                            state.provider = new ethers.BrowserProvider(provider);
-                            state.signer = await state.provider.getSigner();
-                            if (CONTRACT_ADDRESS && CONTRACT_ABI) {
-                                state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
-                            }
-                            state.isWalletConnected = true;
-                            updateUI();
-                            showNotification(`Wallet connected on Base: ${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`, 'success');
-                            break;
-                        case 'DISCONNECT_SUCCESS':
-                            handleDisconnect();
-                            showNotification('Wallet disconnected.', 'info');
-                            break;
-                        case 'CHAIN_CHANGED':
-                            const newChainId = parseInt(params.chainId, 16);
-                            if (newChainId !== BASE_CHAIN_ID) {
-                                showNotification('Switched to non-Base chain. Please switch to Base.', 'error');
-                                await modal.open({ view: 'Networks' });
-                            } else {
-                                showNotification('Switched to Base.', 'info');
-                                // Re-init signer
-                                state.signer = await state.provider.getSigner();
-                            }
-                            break;
-                        case 'ACCOUNT_CHANGED':
-                            if (params.addresses.length === 0) {
-                                handleDisconnect();
-                            } else {
-                                state.walletAddress = ethers.getAddress(params.addresses[0]);
-                                state.signer = await state.provider.getSigner();
-                                const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
-                                connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                                showNotification('Account changed.', 'info');
-                            }
-                            break;
+                // Subscribe to AppKit state changes
+                modal.subscribeState(async (newState) => {
+                    console.log('AppKit state changed:', newState);
+                    
+                    if (newState.open === false && state.isWalletConnected && !newState.selectedNetworkId) {
+                        // Modal closed and disconnected
+                        handleDisconnect();
+                        showNotification('Wallet disconnected.', 'info');
+                        return;
+                    }
+
+                    // Check if we have a connection
+                    const address = modal.getAddress();
+                    const chainId = modal.getChainId();
+                    const isConnected = modal.getIsConnected();
+
+                    if (isConnected && address && !state.isWalletConnected) {
+                        // New connection
+                        if (chainId !== BASE_CHAIN_ID) {
+                            showNotification('Please switch to Base network.', 'error');
+                            await modal.open({ view: 'Networks' });
+                            return;
+                        }
+                        
+                        state.walletAddress = ethers.getAddress(address);
+                        const walletProvider = modal.getWalletProvider();
+                        state.provider = new ethers.BrowserProvider(walletProvider);
+                        state.signer = await state.provider.getSigner();
+                        
+                        if (CONTRACT_ADDRESS && CONTRACT_ABI) {
+                            state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
+                        }
+                        
+                        state.isWalletConnected = true;
+                        updateUI();
+                        showNotification(`Wallet connected on Base: ${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`, 'success');
+                    } else if (!isConnected && state.isWalletConnected) {
+                        // Disconnected
+                        handleDisconnect();
+                    } else if (isConnected && address && state.walletAddress && address.toLowerCase() !== state.walletAddress.toLowerCase()) {
+                        // Account changed
+                        state.walletAddress = ethers.getAddress(address);
+                        state.signer = await state.provider.getSigner();
+                        const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                        connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                        showNotification('Account changed.', 'info');
+                    } else if (isConnected && chainId && chainId !== BASE_CHAIN_ID) {
+                        // Wrong network
+                        showNotification('Please switch to Base network.', 'error');
+                        await modal.open({ view: 'Networks' });
+                    } else if (isConnected && chainId === BASE_CHAIN_ID && state.walletAddress) {
+                        // Switched to correct network
+                        const walletProvider = modal.getWalletProvider();
+                        state.provider = new ethers.BrowserProvider(walletProvider);
+                        state.signer = await state.provider.getSigner();
+                        showNotification('Switched to Base network.', 'success');
                     }
                 });
 
@@ -651,13 +632,11 @@
                 }
 
                 async function checkAndPromptApproval() {
-                    // If not an ERC20 token, no approval needed
                     if (state.token !== 'ERC20' || !state.tokenInfo.contract || !CONTRACT_ADDRESS) {
                         approvalSection.classList.add('hidden');
                         return true;
                     }
                     
-                    // Calculate total amount in BigInt (smallest unit)
                     const totalAmountDecimal = state.recipients.reduce((sum, r) => sum + r.amount, 0);
                     const totalAmountBN = ethers.parseUnits(totalAmountDecimal.toString(), state.tokenInfo.decimals);
                     
@@ -669,15 +648,14 @@
 
                         if (allowance >= totalAmountBN) {
                             approvalSection.classList.add('hidden');
-                            return true; // Already approved enough
+                            return true;
                         } else {
-                            // Display approval prompt
                             approveAmountEl.textContent = totalAmountDecimal.toFixed(state.tokenInfo.decimals > 4 ? 4 : state.tokenInfo.decimals);
                             approveSymbolEl.textContent = state.tokenInfo.symbol;
                             approvalMessage.textContent = `The batch sender requires approval to spend ${totalAmountDecimal.toFixed(4)} ${state.tokenInfo.symbol}. Your current allowance is insufficient.`;
                             approvalSection.classList.remove('hidden');
                             
-                            return false; // Approval needed
+                            return false;
                         }
                     } catch (error) {
                         console.error('Allowance check failed:', error);
@@ -694,29 +672,26 @@
                     approveBtn.disabled = true;
                     approveBtn.innerHTML = 'Approving...';
                     
-                    // Approve the total required amount
                     const amountToApprove = state.tokenInfo.requiredAllowance;
 
                     try {
-                        showNotification(`Requesting approval for total batch amount of ${ethers.formatUnits(amountToApprove, state.tokenInfo.decimals)} ${state.tokenInfo.symbol}...`, 'info');
+                        showNotification(`Requesting approval for ${ethers.formatUnits(amountToApprove, state.tokenInfo.decimals)} ${state.tokenInfo.symbol}...`, 'info');
                         
                         const contractWithSigner = state.tokenInfo.contract.connect(state.signer);
                         const tx = await contractWithSigner.approve(CONTRACT_ADDRESS, amountToApprove);
                         
                         showNotification(`Approval transaction sent. Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
                         
-                        await tx.wait(); // Wait for 1 confirmation
+                        await tx.wait();
                         
                         showNotification(`Approval confirmed! You can now dispatch the batch.`, 'success');
                         
-                        // Update state and UI
                         state.tokenInfo.allowance = amountToApprove;
                         approvalSection.classList.add('hidden');
-                        updateSummary(); // Re-enable dispatch button
+                        updateSummary();
                         
                     } catch (error) {
                         console.error('Approval failed:', error);
-                        // Check for user rejection
                         const msg = error.code === 'ACTION_REJECTED' ? 'Transaction rejected by user.' : `Approval failed: ${error.message.substring(0, 100)}`;
                         showNotification(msg, 'error');
                     } finally {
@@ -741,7 +716,6 @@
                     try {
                         if (recipients.length === 0) throw new Error('No recipients defined');
 
-                        // Pre-flight checks
                         const decimals = token === 'ETH' ? 18 : tokenInfo.decimals;
                         const amounts = recipients.map(r => ethers.parseUnits(r.amount.toString(), decimals));
                         const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
@@ -763,7 +737,6 @@
                             }
                         }
 
-                        // ERC-20 Approval Check (Final check before sending)
                         if (token === 'ERC20') {
                             const isApproved = await checkAndPromptApproval();
                             if (!isApproved) {
@@ -771,7 +744,6 @@
                             }
                         }
 
-                        // Send transaction
                         dispatchBtnText.textContent = 'Requesting transaction signature...';
                         let tx;
                         const recipientAddresses = recipients.map(r => r.address);
@@ -783,10 +755,8 @@
                             tx = await batchContract.disperseToken(tokenInfo.address, recipientAddresses, amounts);
                         }
                         
-                        // Transaction Feedback
                         showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
 
-                        // Wait for confirmation
                         const receipt = await tx.wait();
 
                         if (receipt.status === 1) {
@@ -794,12 +764,10 @@
                                 <a href="${BASE_EXPLORER_URL}/tx/${receipt.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on BaseScan</a>`;
                             showNotification(message, 'success');
                             
-                            // Confetti celebration
                             if (window.confetti) {
                                 window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
                             }
                             
-                            // Reset form
                             recipientsTextarea.value = '';
                             parseAndValidateData('', 'text');
 
@@ -810,7 +778,7 @@
                     } catch (error) {
                         console.error('Dispatch error:', error);
                         let reason = error.message || 'Unknown error';
-                        // Decode revert reason if present
+                        
                         if (error.reason) {
                             reason = error.reason;
                         } else if (error.data) {
@@ -820,33 +788,12 @@
                                 const decoded = iface.parseError(hexData);
                                 if (decoded) {
                                     reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
-                                } else {
-                                    // Fallback to string decode for Error(string)
-                                    const revertSelector = '0x08c379a0';
-                                    if (hexData.startsWith(revertSelector)) {
-                                        const stringData = hexData.slice(10);
-                                        reason = ethers.toUtf8String('0x' + stringData);
-                                    }
-                                }
-                            } catch (decodeErr) {
-                                console.error('Revert decode failed:', decodeErr);
-                            }
-                        } else if (error.error?.data) {
-                            try {
-                                const data = error.error.data;
-                                const hexData = data.startsWith('0x') ? data : '0x' + data.slice(2 || data);
-                                const iface = new ethers.Interface(CONTRACT_ABI);
-                                const decoded = iface.parseError(hexData);
-                                if (decoded) {
-                                    reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
-                                } else if (hexData.startsWith('0x08c379a0')) {
-                                    const stringData = hexData.slice(10);
-                                    reason = ethers.toUtf8String('0x' + stringData);
                                 }
                             } catch (decodeErr) {
                                 console.error('Revert decode failed:', decodeErr);
                             }
                         }
+                        
                         const msg = error.code === 'ACTION_REJECTED' ? 'Transaction rejected by user.' : `Dispatch failed: ${reason}`;
                         showNotification(msg, 'error');
                     } finally {
@@ -854,12 +801,11 @@
                         dispatchBtnText.textContent = 'Dispatch Secure Batch';
                         document.getElementById('shieldIcon').classList.remove('hidden');
                         dispatchBtn.disabled = false;
-                        updateSummary(); // Re-check state which might re-disable if conditions are not met
+                        updateSummary();
                     }
                 }
 
-
-                // --- UI/Data Functions (Completed Parsing & Preview Logic) ---
+                // --- UI/Data Functions ---
 
                 function parseAndValidateData(data, type = 'text') {
                     let parsedData = [];
@@ -869,7 +815,6 @@
                     if (type === 'json') {
                         try {
                             parsedData = JSON.parse(data);
-                            // Assume JSON array of {address: '0x...', amount: 1.5}
                             parsedData = parsedData.map(item => ({
                                 address: ethers.getAddress(item.address),
                                 amount: parseFloat(item.amount)
@@ -878,9 +823,8 @@
                             showNotification('Invalid JSON format. Expected array of {address, amount}.', 'error');
                             return;
                         }
-                    } else { // text or csv
+                    } else {
                         const lines = data.trim().split('\n');
-                        // Check for CSV header
                         if (lines.length > 0 && (lines[0].toLowerCase().includes('address') && lines[0].toLowerCase().includes('amount'))) {
                             isCSVHeader = true;
                         }
@@ -890,7 +834,6 @@
                             const line = lines[i].trim();
                             if (line === '') continue;
 
-                            // Split by comma or space (flexible separator)
                             const parts = line.split(/[\s,]+/).filter(p => p.trim());
                             
                             if (parts.length < 2) {
@@ -899,13 +842,13 @@
                             }
 
                             let address = parts[0].trim();
-                            let amountStr = parts.slice(1).join(' ').trim(); // Join rest for amount if multi-word
+                            let amountStr = parts.slice(1).join(' ').trim();
 
                             const amount = parseFloat(amountStr);
 
                             if (address && amount > 0 && !isNaN(amount)) {
                                 try {
-                                    address = ethers.getAddress(address); // Validates checksum
+                                    address = ethers.getAddress(address);
                                     parsedData.push({ address, amount });
                                 } catch (e) {
                                     errorCount++;
@@ -942,16 +885,13 @@
                         if (state.token === 'ERC20') {
                             const isValidToken = state.tokenInfo.address && state.tokenInfo.symbol !== 'ETH';
                             if (isValidToken) {
-                                // Check approval for ERC20
                                 const isApproved = await checkAndPromptApproval();
                                 isReady = isApproved;
                             } else {
-                                // Invalid ERC20 address entered
                                 isReady = false;
                                 showNotification('Enter a valid ERC-20 contract address to proceed.', 'error');
                             }
                         } else {
-                            // ETH is ready if connected and recipients exist
                             isReady = true;
                         }
                     }
@@ -975,7 +915,6 @@
                     
                     if (state.recipients.length > 0) {
                         dataPreview.classList.remove('hidden');
-                        // Show first 5 for preview
                         const previewData = state.recipients.slice(0, 5);
                         previewData.forEach(item => {
                             const row = document.createElement('tr');
@@ -997,7 +936,6 @@
                     }
                 }
 
-                // Export functionality (basic CSV download)
                 document.getElementById('exportListBtn').addEventListener('click', (e) => {
                     e.preventDefault();
                     if (state.recipients.length === 0) {
@@ -1038,7 +976,6 @@
                         tokenSymbolDisplay.textContent = 'Enter Address';
                         tokenInfoRow.classList.add('hidden');
                         approvalSection.classList.add('hidden');
-                        // Reset token info to force validation
                         state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
                     } else {
                         erc20InputContainer.classList.add('hidden');
@@ -1063,7 +1000,7 @@
                     updateSummary();
                 });
 
-                recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientTextarea.value, 'text'));
+                recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
                 csvUpload.addEventListener('change', (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
@@ -1072,7 +1009,7 @@
                     reader.onload = (e) => {
                         recipientsTextarea.value = e.target.result;
                         let fileType = 'text';
-                        if (file.name.endsWith('.csv')) { fileType = 'text'; } // Treat as text with header check
+                        if (file.name.endsWith('.csv')) { fileType = 'text'; }
                         else if (file.name.endsWith('.json')) { fileType = 'json'; }
                         parseAndValidateData(e.target.result, fileType);
                     };
@@ -1082,7 +1019,7 @@
                 // --- INITIALIZATION ---
                 updateStepIndicator(state.currentStep);
                 
-            })(); // End of IIFE
+            })();
         });
     </script>
 </body>
