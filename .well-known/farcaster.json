@@ -1,1 +1,21 @@
 
+{
+  "frame": {
+    "name": "FarSend",
+    "version": "1",
+    "iconUrl": "https://farsend.vercel.app/icon.png",
+    "homeUrl": "https://farsend.vercel.app",
+    "imageUrl": "https://farsend.vercel.app/image.png",
+    "splashImageUrl": "https://farsend.vercel.app/splash.png",
+    "splashBackgroundColor": "#6A3CFF",
+    "webhookUrl": "https://farsend.vercel.app/api/webhook",
+    "subtitle": "FarSend - Private Batch Sender",
+    "description": "FarSend - Private Batch Sender",
+    "primaryCategory": "utility"
+  },
+  "accountAssociation": {
+    "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDE4MjhjNEJmNzhEQWI2NkI0QjdkZUJmYUEzOEYwQWQxMjVFYzhkMTUifQ",
+    "payload": "eyJkb21haW4iOiJmYXJzZW5kLnZlcmNlbC5hcHAifQ",
+    "signature": "NpSI1g/ZgYZ56D4COhFFQaHqmye8goGNpkGVO5TS/TJKPigb3u3acPCRolbzVISnPEFibLqHIyNG5vTOraFfCRw="
+  }
+}
