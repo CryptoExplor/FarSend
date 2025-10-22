@@ -5,14 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FarSend - Private Batch Sender</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Canvas Confetti for celebrations -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- Farcaster Mini App Metadata -->
     <meta name="fc:miniapp" content='{
       "version":"1",
       "imageUrl":"https://farsend.vercel.app/image.png",
@@ -106,7 +104,6 @@
 </head>
 <body class="text-gray-900 min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-2xl mx-auto">
-        <!-- Header -->
         <header class="text-center mb-8">
             <div class="flex justify-center items-center mb-2">
                 <h1 class="text-5xl font-extrabold tracking-tight bg-gradient-to-r from-[#6A3CFF] via-[#A26BFF] to-[#00E7FF] text-transparent bg-clip-text animate-gradient-x">FarSend</h1>
@@ -114,9 +111,7 @@
             <p class="text-gray-600 mt-2">Send ETH & ERC-20s to multiple addresses, securely on Base.</p>
         </header>
 
-        <!-- Main App Interface -->
         <main class="main-card rounded-2xl p-6 md:p-8 space-y-6">
-            <!-- Progress Stepper UI Component -->
             <div id="stepIndicator" class="flex justify-between items-start mb-8 pb-4 border-b border-gray-100">
                 <div class="flex flex-col items-center flex-1 min-w-0">
                     <div id="stepCircle1" class="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300" style="background-color: #6A3CFF; color: white; border-color: #6A3CFF; ring-color: #6A3CFF;">
@@ -142,7 +137,6 @@
                 </div>
             </div>
             
-            <!-- Step 1: Wallet Connection & Farcaster POC -->
             <div class="flex flex-col space-y-3 py-2">
                 <div class="flex justify-between items-center">
                     <h2 class="text-lg font-semibold text-gray-800">Wallet</h2>
@@ -233,7 +227,7 @@
                         </div>
                         <div class="flex justify-between items-center pt-2 border-t border-gray-100">
                             <span class="text-gray-600">Transaction Type:</span>
-                            <span id="transactionType" class="font-bold text-gray-900">Batch Send</span>
+                            <span class="font-bold text-gray-900">Batch Send</span>
                         </div>
                     </div>
                     <button id="dispatchBtn" disabled class="w-full mt-6 btn-primary font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-[1.01] duration-300 flex items-center justify-center space-x-3">
@@ -272,6 +266,7 @@
       import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
       import { injected, walletConnect } from 'https://esm.sh/@wagmi/connectors';
       import { createPublicClient, parseEther, parseUnits, getAddress, decodeErrorResult } from 'https://esm.sh/viem';
+      import { formatUnits } from 'https://esm.sh/ethers';
 
       window.addEventListener('load', async () => {
           (async () => {
@@ -317,7 +312,7 @@
                   "function symbol() view returns (string)",
                   "function decimals() view returns (uint8)",
                   "function allowance(address owner, address spender) view returns (uint256)",
-                  "function approve(address spender, uint256 amount) returns (bool)",
+                  "function approve(address spender, uint256 amount) returns (bool)"
               ];
 
               let isMiniApp = false;
@@ -362,7 +357,7 @@
                       walletConnect({
                           projectId: WALLETCONNECT_PROJECT_ID,
                           metadata,
-                          showQrModal: false // Disable WalletConnect modal
+                          showQrModal: false
                       })
                   ],
                   transports: {
@@ -385,7 +380,6 @@
               const tokenInfoRow = document.getElementById('tokenInfoRow');
               const dispatchBtn = document.getElementById('dispatchBtn');
               const dispatchBtnText = document.getElementById('dispatchBtnText');
-              const transactionType = document.getElementById('transactionType');
               const loadingSpinner = document.getElementById('loadingSpinner');
               const notification = document.getElementById('notification');
               const approvalSection = document.getElementById('approvalSection');
@@ -642,7 +636,7 @@
               }
 
               async function checkAndPromptApproval() {
-                  if (state.token !== 'ERC20' || !state.tokenInfo.address || state.recipients.length === 1) {
+                  if (state.token !== 'ERC20' || !state.tokenInfo.address || !CONTRACT_ADDRESS) {
                       approvalSection.classList.add('hidden');
                       return true;
                   }
@@ -662,7 +656,7 @@
                           return true;
                       } else {
                           const neededAmount = totalAmountBN - allowance;
-                          const neededAmountFormatted = parseFloat(ethers.formatUnits(neededAmount, state.tokenInfo.decimals)).toFixed(state.tokenInfo.decimals > 4 ? 4 : state.tokenInfo.decimals);
+                          const neededAmountFormatted = formatUnits(neededAmount, state.tokenInfo.decimals);
                           approveAmountEl.textContent = totalAmountDecimal.toFixed(state.tokenInfo.decimals > 4 ? 4 : state.tokenInfo.decimals);
                           approveSymbolEl.textContent = state.tokenInfo.symbol;
                           approvalMessage.textContent = `The batch sender requires approval to spend ${totalAmountDecimal.toFixed(4)} ${state.tokenInfo.symbol}. Your current allowance is insufficient.`;
@@ -685,7 +679,7 @@
                   approveBtn.innerHTML = 'Approving...';
                   const amountToApprove = state.tokenInfo.requiredAllowance;
                   try {
-                      showNotification(`Requesting approval for total batch amount of ${parseFloat(ethers.formatUnits(amountToApprove, state.tokenInfo.decimals)).toFixed(4)} ${state.tokenInfo.symbol}...`, 'info');
+                      showNotification(`Requesting approval for total batch amount of ${formatUnits(amountToApprove, state.tokenInfo.decimals)} ${state.tokenInfo.symbol}...`, 'info');
                       const txHash = await writeContract(wagmiConfig, {
                           address: state.tokenInfo.address,
                           abi: ERC20_ABI,
@@ -713,7 +707,7 @@
                   if (!state.batchContract || !CONTRACT_ADDRESS) return showNotification('Batch contract not loaded. Please refresh the page.', 'error');
                   dispatchBtn.disabled = true;
                   loadingSpinner.classList.remove('hidden');
-                  dispatchBtnText.textContent = state.recipients.length === 1 ? 'Preparing transfer...' : 'Preparing batch...';
+                  dispatchBtnText.textContent = 'Preparing batch...';
                   document.getElementById('shieldIcon').classList.add('hidden');
                   const { recipients, token, tokenInfo, batchContract, walletAddress } = state;
                   try {
@@ -725,75 +719,55 @@
                       if (token === 'ETH') {
                           const balance = await publicClient.getBalance({ address: walletAddress });
                           if (totalAmountBN > balance) {
-                              const required = ethers.formatEther(totalAmountBN);
-                              const available = ethers.formatEther(balance);
+                              const required = formatUnits(totalAmountBN, 18);
+                              const available = formatUnits(balance, 18);
                               throw new Error(`Insufficient ETH balance. Required: ${required} ETH, Available: ${available} ETH`);
                           }
                       } else {
                           if (!tokenInfo.address) throw new Error('Token contract not initialized');
-                          if (recipients.length > 1) {
-                              const allowance = await readContract(wagmiConfig, {
-                                  address: tokenInfo.address,
-                                  abi: ERC20_ABI,
-                                  functionName: 'allowance',
-                                  args: [walletAddress, CONTRACT_ADDRESS],
-                              });
-                              if (allowance < totalAmountBN) {
-                                  const required = ethers.formatUnits(totalAmountBN, decimals);
-                                  const avail = ethers.formatUnits(allowance, decimals);
-                                  throw new Error(`Insufficient allowance for ${tokenInfo.symbol}. Required: ${required}, Current: ${avail}`);
-                              }
+                          const allowance = await readContract(wagmiConfig, {
+                              address: tokenInfo.address,
+                              abi: ERC20_ABI,
+                              functionName: 'allowance',
+                              args: [walletAddress, CONTRACT_ADDRESS],
+                          });
+                          if (allowance < totalAmountBN) {
+                              const required = formatUnits(totalAmountBN, decimals);
+                              const avail = formatUnits(allowance, decimals);
+                              throw new Error(`Insufficient allowance for ${tokenInfo.symbol}. Required: ${required}, Current: ${avail}`);
                           }
                       }
 
-                      if (token === 'ERC20' && recipients.length > 1) {
+                      if (token === 'ERC20') {
                           const isApproved = await checkAndPromptApproval();
                           if (!isApproved) {
                               throw new Error('Token approval required. Please approve before dispatching.');
                           }
                       }
 
-                      dispatchBtnText.textContent = state.recipients.length === 1 ? 'Requesting transfer signature...' : 'Requesting batch signature...';
+                      dispatchBtnText.textContent = 'Requesting batch signature...';
                       let txHash;
                       const recipientAddresses = recipients.map(r => r.address);
-
-                      if (recipients.length === 1) {
-                          if (token === 'ETH') {
-                              txHash = await publicClient.sendTransaction({
-                                  account: walletAddress,
-                                  to: recipientAddresses[0],
-                                  value: totalAmountBN
-                              });
-                          } else {
-                              txHash = await writeContract(wagmiConfig, {
-                                  address: tokenInfo.address,
-                                  abi: ERC20_ABI,
-                                  functionName: 'transfer',
-                                  args: [recipientAddresses[0], totalAmountBN],
-                              });
-                          }
+                      if (token === 'ETH') {
+                          const totalValue = totalAmountBN;
+                          txHash = await writeContract(wagmiConfig, {
+                              ...batchContract,
+                              functionName: 'disperseEther',
+                              args: [recipientAddresses, amounts],
+                              value: totalValue,
+                          });
                       } else {
-                          if (token === 'ETH') {
-                              const totalValue = totalAmountBN;
-                              txHash = await writeContract(wagmiConfig, {
-                                  ...batchContract,
-                                  functionName: 'disperseEther',
-                                  args: [recipientAddresses, amounts],
-                                  value: totalValue,
-                              });
-                          } else {
-                              txHash = await writeContract(wagmiConfig, {
-                                  ...batchContract,
-                                  functionName: 'disperseToken',
-                                  args: [tokenInfo.address, recipientAddresses, amounts],
-                              });
-                          }
+                          txHash = await writeContract(wagmiConfig, {
+                              ...batchContract,
+                              functionName: 'disperseToken',
+                              args: [tokenInfo.address, recipientAddresses, amounts],
+                          });
                       }
                       
-                      showNotification(`${recipients.length === 1 ? 'Transfer' : 'Batch transaction'} sent! Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${txHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
+                      showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${txHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
                       const receipt = await waitForTransactionReceipt(wagmiConfig, { hash: txHash });
                       if (receipt.status === 'success') {
-                          const message = `✅ Success! ${recipients.length === 1 ? 'Transfer' : `Batch of ${recipients.length} transfers`} confirmed.<br>
+                          const message = `✅ Success! Batch of ${recipients.length} transfers confirmed.<br>
                               <a href="${BASE_EXPLORER_URL}/tx/${receipt.transactionHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on BaseScan</a>`;
                           showNotification(message, 'success');
                           if (window.confetti) {
@@ -807,7 +781,7 @@
                   } catch (error) {
                       console.error('Dispatch error:', error);
                       let reason = error.shortMessage || error.message || 'Unknown error';
-                      if (error.data && recipients.length > 1) {
+                      if (error.data) {
                           try {
                               const decoded = decodeErrorResult({
                                   abi: CONTRACT_ABI,
@@ -824,7 +798,7 @@
                       showNotification(msg, 'error');
                   } finally {
                       loadingSpinner.classList.add('hidden');
-                      dispatchBtnText.textContent = state.recipients.length === 1 ? 'Dispatch Transfer' : 'Dispatch Batch';
+                      dispatchBtnText.textContent = 'Dispatch Batch';
                       document.getElementById('shieldIcon').classList.remove('hidden');
                       dispatchBtn.disabled = false;
                       updateSummary();
@@ -891,14 +865,13 @@
                   recipientCountEl.textContent = count;
                   const tokenSymbol = state.tokenInfo.symbol;
                   totalAmountEl.textContent = `${total.toFixed(4)} ${tokenSymbol}`;
-                  transactionType.textContent = count === 1 ? 'Single Transfer' : 'Batch Send';
                   let isReady = false;
                   if (count > 0 && total > 0 && state.isWalletConnected && state.batchContract) {
                       if (state.token === 'ERC20') {
                           const isValidToken = state.tokenInfo.address && state.tokenInfo.symbol !== 'ETH';
                           if (isValidToken) {
                               const isApproved = await checkAndPromptApproval();
-                              isReady = count === 1 || isApproved;
+                              isReady = isApproved;
                           } else {
                               isReady = false;
                               showNotification('Enter a valid ERC-20 contract address to proceed.', 'error');
@@ -908,7 +881,6 @@
                       }
                   }
                   dispatchBtn.disabled = !isReady;
-                  dispatchBtnText.textContent = count === 1 ? 'Dispatch Transfer' : 'Dispatch Batch';
                   if (isReady && count > 0) {
                       updateStepIndicator(3);
                   } else if (state.isWalletConnected && count > 0) {
