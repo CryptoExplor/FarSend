@@ -1,0 +1,38 @@
+{
+  "name": "farsend",
+  "version": "1.0.0",
+  "description": "Private Batch Sender on Base using Reown AppKit",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .js,.ts,.jsx,.tsx",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@reown/appkit": "1.7.19",
+    "@reown/appkit-adapter-ethers": "1.7.19",
+    "@reown/appkit-networks": "1.7.19",
+    "ethers": "6.15.0",
+    "crypto-js": "4.2.0"
+  },
+  "devDependencies": {
+    "vite": "^4.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^2.8.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "web3",
+    "farsend",
+    "reown",
+    "walletconnect",
+    "batch",
+    "base"
+  ],
+  "author": "",
+  "license": "MIT"
+}
