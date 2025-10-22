@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FarSend - Private Batch Sender</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Ethers.js for wallet and contract interaction -->
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.15.0/ethers.umd.min.js"></script>
+    <!-- Ethers.js removed; switching to Wagmi/viem for Farcaster integration -->
     <!-- Crypto-JS for FHE Proof-of-Concept (client-side encryption) -->
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <!-- Canvas Confetti for celebrations -->
@@ -15,6 +14,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Farcaster Mini App Metadata -->
+    <meta name="fc:miniapp" content='{
+      "version":"1",
+      "imageUrl":"https://farsend.example.com/image.png", // Replace with your image URL
+      "button":{
+        "title":"FarSend",
+        "action":{
+          "type":"launch_miniapp",
+          "name":"SEND",
+          "url":"https://farsend.example.com", // Replace with your app URL
+          "splashImageUrl":"https://farsend.example.com/splash.png", // Replace with splash image
+          "splashBackgroundColor":"#6A3CFF"
+        }
+      }
+    }'>
+
     <style>
         /* Define Farcaster Primary Color */
         :root {
@@ -114,7 +130,7 @@
             <!-- Progress Stepper UI Component -->
             <div id="stepIndicator" class="flex justify-between items-start mb-8 pb-4 border-b border-gray-100">
                 <div class="flex flex-col items-center flex-1 min-w-0">
-                    <div id="stepCircle1" class="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 ring-4 ring-opacity-50" style="background-color: #6A3CFF; color: white; border-color: #6A3CFF; ring-color: #6A3CFF;">
+                    <div id="stepCircle1" class="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300" style="background-color: #6A3CFF; color: white; border-color: #6A3CFF; ring-color: #6A3CFF;">
                         <span class="font-bold">1</span>
                     </div>
                     <span id="stepLabel1" class="text-xs mt-2 text-center font-semibold" style="color: #6A3CFF;">Connect Wallet</span>
@@ -274,753 +290,801 @@
     <!-- Notification Area -->
     <div id="notification" class="p-4 rounded-lg text-sm main-card shadow-lg" style="border: 1px solid #A98EFF;"></div>
 
-    <!-- AppKit Initialization -->
+    <!-- Farcaster SDK -->
     <script type="module">
-        import { createAppKit } from 'https://unpkg.com/@reown/appkit@1.7.13/dist/esm/index.js';
-        import { EthersAdapter } from 'https://unpkg.com/@reown/appkit-adapter-ethers@1.7.13/dist/esm/index.js';
-        import { base } from 'https://unpkg.com/@reown/appkit@1.7.13/dist/esm/networks/index.js';
-
-        const projectId = 'e0dd881bad824ac3418617434a79f917';
-
-        const metadata = {
-            name: 'FarSend',
-            description: 'Private Batch Sender on Base',
-            url: window.location.origin,
-            icons: ['https://farsend.vercel.app/icon.png']
-        };
-
-        const networks = [base];
-
-        const ethersAdapter = new EthersAdapter();
-
-        const modal = createAppKit({
-            adapters: [ethersAdapter],
-            networks,
-            metadata,
-            projectId,
-            features: {
-                analytics: true
-            }
-        });
-
-        window.modal = modal;
+      import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+      sdk.actions.ready({ disableNativeGestures: true });
     </script>
 
-    <script>
-        // Wait for all deferred scripts to load before initializing
-        window.addEventListener('load', async () => {
-            // Check if required libraries are loaded
-            if (typeof window.ethers === 'undefined') {
-                console.error('ethers.js not loaded');
-                document.getElementById('connectWalletBtn').innerHTML = '<span style="color: red;">Error: ethers.js failed to load. Please refresh.</span>';
-                return;
-            }
-            if (typeof window.CryptoJS === 'undefined') {
-                console.error('CryptoJS not loaded');
-                return;
-            }
-            if (typeof window.modal === 'undefined') {
-                console.error('AppKit modal not initialized');
-                document.getElementById('connectWalletBtn').innerHTML = '<span style="color: red;">Error: AppKit failed to load. Please verify your Project ID on https://dashboard.reown.com and refresh.</span>';
-                return;
-            }
+    <!-- Wagmi + Base Logic (Replaces ethers.js) -->
+    <script type="module">
+      import {
+        createConfig,
+        connect,
+        disconnect,
+        writeContract,
+        readContract,
+        http,
+        waitForTransactionReceipt,
+        watchAccount
+      } from 'https://esm.sh/@wagmi/core';
+      import { base } from 'https://esm.sh/@wagmi/core/chains';
+      import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
+      import { injected } from 'https://esm.sh/@wagmi/connectors';
+      import { parseEther, parseUnits, getAddress, Interface } from 'https://esm.sh/viem';
 
-            // Use an IIFE for encapsulation and to use async/await
-            (async () => {
-                // --- CONSTANTS & CONFIGURATION ---
-                const { ethers } = window;
-                const modal = window.modal;
-                const BASE_CHAIN_ID = 8453;
-                const BASE_EXPLORER_URL = 'https://basescan.org';
+      // Wait for all deferred scripts to load before initializing
+      window.addEventListener('load', async () => {
+          // Check if required libraries are loaded
+          if (typeof window.CryptoJS === 'undefined') {
+              console.error('CryptoJS not loaded');
+              return;
+          }
 
-                // Load Base Contract Config (with localStorage caching)
-                let CONTRACT_ADDRESS, CONTRACT_ABI;
-                const cacheKey = 'farsend-base-config';
-                const cached = localStorage.getItem(cacheKey);
-                if (cached) {
-                    try {
-                        const cfg = JSON.parse(cached);
-                        CONTRACT_ADDRESS = cfg.address;
-                        CONTRACT_ABI = cfg.abi;
-                        console.log('✅ Loaded BaseBatchSender from cache:', CONTRACT_ADDRESS);
-                    } catch (e) {
-                        console.warn('Cache invalid, fetching fresh config');
-                    }
-                }
-                if (!CONTRACT_ADDRESS) {
-                    try {
-                        const res = await fetch('base.json');
-                        if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch base.json`);
-                        const cfg = await res.json();
-                        CONTRACT_ADDRESS = cfg.address;
-                        CONTRACT_ABI = cfg.abi;
-                        localStorage.setItem(cacheKey, JSON.stringify(cfg));
-                        console.log('✅ Loaded BaseBatchSender:', CONTRACT_ADDRESS);
-                    } catch (e) {
-                        console.error('❌ Failed loading base.json:', e);
-                    }
-                }
-                
-                // Minimal ABI for ERC-20 interaction
-                const ERC20_ABI = [
-                    "function name() view returns (string)",
-                    "function symbol() view returns (string)",
-                    "function decimals() view returns (uint8)",
-                    "function allowance(address owner, address spender) view returns (uint256)",
-                    "function approve(address spender, uint256 amount) returns (bool)",
-                ];
-                
-                // --- DOM Elements ---
-                const connectWalletBtn = document.getElementById('connectWalletBtn');
-                const farcasterConnectBtn = document.getElementById('farcasterConnectBtn');
-                const appContent = document.getElementById('app-content');
-                const tokenSelect = document.getElementById('tokenSelect');
-                const erc20InputContainer = document.getElementById('erc20InputContainer');
-                const erc20Address = document.getElementById('erc20Address');
-                const tokenSymbolDisplay = document.getElementById('tokenSymbolDisplay');
-                const recipientsTextarea = document.getElementById('recipients');
-                const csvUpload = document.getElementById('csvUpload');
-                const recipientCountEl = document.getElementById('recipientCount');
-                const totalAmountEl = document.getElementById('totalAmount');
-                const tokenContractDisplay = document.getElementById('tokenContractDisplay');
-                const tokenInfoRow = document.getElementById('tokenInfoRow');
-                const dispatchBtn = document.getElementById('dispatchBtn');
-                const dispatchBtnText = document.getElementById('dispatchBtnText');
-                const loadingSpinner = document.getElementById('loadingSpinner');
-                const notification = document.getElementById('notification');
-                const approvalSection = document.getElementById('approvalSection');
-                const approveBtn = document.getElementById('approveBtn');
-                const approvalMessage = document.getElementById('approvalMessage');
-                const approveAmountEl = document.getElementById('approveAmount');
-                const approveSymbolEl = document.getElementById('approveSymbol');
+          // Use an IIFE for encapsulation and to use async/await
+          (async () => {
+              // --- CONSTANTS & CONFIGURATION ---
+              const { CryptoJS } = window;
+              const BASE_CHAIN_ID = 8453; // Base Mainnet (number for wagmi/viem)
+              const BASE_EXPLORER_URL = 'https://basescan.org';
 
-                // --- APPLICATION STATE (Web3 & App) ---
-                const state = {
-                    isWalletConnected: false,
-                    walletAddress: null,
-                    provider: null,
-                    signer: null,
-                    batchContract: null,
-                    recipients: [],
-                    token: 'ETH',
-                    tokenInfo: {
-                        address: '',
-                        symbol: 'ETH',
-                        decimals: 18,
-                        contract: null,
-                        allowance: 0n,
-                        requiredAllowance: 0n,
-                    },
-                    currentStep: 1,
-                };
+              // Load Base Contract Config (with localStorage caching)
+              let CONTRACT_ADDRESS, CONTRACT_ABI;
+              const cacheKey = 'farsend-base-config';
+              const cached = localStorage.getItem(cacheKey);
+              if (cached) {
+                  try {
+                      const cfg = JSON.parse(cached);
+                      CONTRACT_ADDRESS = cfg.address;
+                      CONTRACT_ABI = cfg.abi;
+                      console.log('✅ Loaded BaseBatchSender from cache:', CONTRACT_ADDRESS);
+                  } catch (e) {
+                      console.warn('Cache invalid, fetching fresh config');
+                  }
+              }
+              if (!CONTRACT_ADDRESS) {
+                  try {
+                      const res = await fetch('base.json');
+                      if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch base.json`);
+                      const cfg = await res.json();
+                      CONTRACT_ADDRESS = cfg.address;
+                      CONTRACT_ABI = cfg.abi;
+                      localStorage.setItem(cacheKey, JSON.stringify(cfg));
+                      console.log('✅ Loaded BaseBatchSender:', CONTRACT_ADDRESS);
+                  } catch (e) {
+                      console.error('❌ Failed loading base.json:', e);
+                      // Proceed with error handling in dispatch
+                  }
+              }
+              
+              // Minimal ABI for ERC-20 interaction
+              const ERC20_ABI = [
+                  "function name() view returns (string)",
+                  "function symbol() view returns (string)",
+                  "function decimals() view returns (uint8)",
+                  "function allowance(address owner, address spender) view returns (uint256)",
+                  "function approve(address spender, uint256 amount) returns (bool)",
+              ];
 
-                // --- HELPER FUNCTIONS ---
+              // Detect if running in Farcaster Mini App (sdk available after import)
+              let isMiniApp = false;
+              let farcasterSdk;
+              try {
+                  farcasterSdk = sdk; // From the imported sdk
+                  if (farcasterSdk && typeof farcasterSdk.actions.ready === 'function') {
+                      isMiniApp = true;
+                      console.log('✅ Running in Farcaster Mini App');
+                  }
+              } catch (e) {
+                  console.log('Not in Farcaster Mini App');
+              }
 
-                function showNotification(message, type = 'success') {
-                    const icons = { success: '✅', error: '❌', info: '💡' };
-                    notification.innerHTML = `${icons[type] || ''} ${message}`;
-                    notification.className = 'p-4 rounded-lg text-sm main-card shadow-lg show'; 
-                    
-                    if (type === 'success') {
-                        notification.style.backgroundColor = '#d1fae5';
-                        notification.style.color = '#065f46';
-                        notification.style.border = '1px solid #34d399';
-                    } else if (type === 'error') {
-                        notification.style.backgroundColor = '#fee2e2';
-                        notification.style.color = '#991b1b';
-                        notification.style.border = '1px solid #f87171';
-                    } else {
-                        notification.style.backgroundColor = '#DBEAFE';
-                        notification.style.color = '#1E40AF';
-                        notification.style.border = '1px solid #93C5FD';
-                    }
-                    setTimeout(() => notification.classList.remove('show'), 8000);
-                }
+              // Optional: Prompt to add app if in mini app and not prompted
+              if (isMiniApp) {
+                  const hasPromptedAddApp = sessionStorage.getItem('hasPromptedAddApp');
+                  if (!hasPromptedAddApp && farcasterSdk?.actions?.addMiniApp) {
+                      try {
+                          await farcasterSdk.actions.addMiniApp();
+                      } catch (_) {}
+                      sessionStorage.setItem('hasPromptedAddApp', 'true');
+                  }
+              }
 
-                function updateStepIndicator(step) {
-                    state.currentStep = step;
-                    const steps = [
-                        { id: 'stepCircle1', labelId: 'stepLabel1', label: 'Connect Wallet' },
-                        { id: 'stepCircle2', labelId: 'stepLabel2', label: 'Define Recipients' },
-                        { id: 'stepCircle3', labelId: 'stepLabel3', label: 'Dispatch' }
-                    ];
+              // Wagmi Config: Use Farcaster connector if in mini app, else injected (MetaMask)
+              const connectors = [];
+              if (isMiniApp) {
+                  connectors.push(farcasterMiniApp(farcasterSdk));
+              } else {
+                  connectors.push(injected());
+              }
 
-                    steps.forEach((s, index) => {
-                        const stepEl = document.getElementById(s.id);
-                        const labelEl = document.getElementById(s.labelId);
-                        const isActive = (index + 1) === step;
-                        const isCompleted = (index + 1) < step;
+              const wagmiConfig = createConfig({
+                  chains: [base],
+                  connectors,
+                  transports: {
+                      [base.id]: http(),
+                  },
+              });
 
-                        stepEl.className = 'w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300';
-                        labelEl.className = 'text-xs mt-2 text-center transition-colors duration-300';
-                        
-                        if (isActive) {
-                            stepEl.style.backgroundColor = '#6A3CFF';
-                            stepEl.style.color = 'white';
-                            stepEl.classList.add('ring-4', 'ring-opacity-50');
-                            stepEl.style.setProperty('ring-color', '#6A3CFF');
-                            labelEl.classList.add('font-semibold');
-                            labelEl.style.color = '#6A3CFF';
-                        } else if (isCompleted) {
-                            stepEl.style.backgroundColor = 'var(--fc-light-bg)';
-                            stepEl.style.color = '#6A3CFF';
-                            stepEl.classList.remove('ring-4', 'ring-opacity-50');
-                            labelEl.style.color = '#582FD6';
-                            labelEl.classList.add('font-medium');
-                        } else {
-                            stepEl.style.backgroundColor = '#E5E7EB';
-                            stepEl.style.color = '#6B7280';
-                            stepEl.classList.remove('ring-4', 'ring-opacity-50');
-                            labelEl.style.color = '#6B7280';
-                            labelEl.classList.remove('font-semibold');
-                        }
-                    });
-                }
+              // --- DOM Elements ---
+              const connectWalletBtn = document.getElementById('connectWalletBtn');
+              const farcasterConnectBtn = document.getElementById('farcasterConnectBtn');
+              const appContent = document.getElementById('app-content');
+              const tokenSelect = document.getElementById('tokenSelect');
+              const erc20InputContainer = document.getElementById('erc20InputContainer');
+              const erc20Address = document.getElementById('erc20Address');
+              const tokenSymbolDisplay = document.getElementById('tokenSymbolDisplay');
+              const recipientsTextarea = document.getElementById('recipients');
+              const csvUpload = document.getElementById('csvUpload');
+              const recipientCountEl = document.getElementById('recipientCount');
+              const totalAmountEl = document.getElementById('totalAmount');
+              const tokenContractDisplay = document.getElementById('tokenContractDisplay');
+              const tokenInfoRow = document.getElementById('tokenInfoRow');
+              const dispatchBtn = document.getElementById('dispatchBtn');
+              const dispatchBtnText = document.getElementById('dispatchBtnText');
+              const loadingSpinner = document.getElementById('loadingSpinner');
+              const notification = document.getElementById('notification');
+              const approvalSection = document.getElementById('approvalSection');
+              const approveBtn = document.getElementById('approveBtn');
+              const approvalMessage = document.getElementById('approvalMessage');
+              const approveAmountEl = document.getElementById('approveAmount');
+              const approveSymbolEl = document.getElementById('approveSymbol');
 
-                function updateUI() {
-                    const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
-                    
-                    connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                    connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
-                    connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
-                    
-                    appContent.classList.remove('hidden');
-                    farcasterConnectBtn.disabled = false;
-                    updateStepIndicator(2);
-                }
+              // --- APPLICATION STATE (Web3 & App) ---
+              const state = {
+                  isWalletConnected: false,
+                  walletAddress: null,
+                  batchContract: CONTRACT_ADDRESS ? { address: CONTRACT_ADDRESS, abi: CONTRACT_ABI } : null,
+                  recipients: [],
+                  token: 'ETH',
+                  tokenInfo: {
+                      address: '',
+                      symbol: 'ETH',
+                      decimals: 18,
+                      allowance: 0n,
+                      requiredAllowance: 0n,
+                  },
+                  currentStep: 1,
+              };
 
-                // --- WEB3 CORE LOGIC ---
+              // --- HELPER FUNCTIONS ---
 
-                async function handleConnect() {
-                    if (state.isWalletConnected) {
-                        try {
-                            await modal.disconnect();
-                        } catch (error) {
-                            console.error('Disconnect error:', error);
-                        }
-                        return;
-                    }
+              function showNotification(message, type = 'success') {
+                  const icons = { success: '✅', error: '❌', info: '💡' };
+                  notification.innerHTML = `${icons[type] || ''} ${message}`;
+                  notification.className = 'p-4 rounded-lg text-sm main-card shadow-lg show'; 
+                  
+                  if (type === 'success') {
+                      notification.style.backgroundColor = '#d1fae5';
+                      notification.style.color = '#065f46';
+                      notification.style.border = '1px solid #34d399';
+                  } else if (type === 'error') {
+                      notification.style.backgroundColor = '#fee2e2';
+                      notification.style.color = '#991b1b';
+                      notification.style.border = '1px solid #f87171';
+                  } else { // info/loading
+                      notification.style.backgroundColor = '#DBEAFE';
+                      notification.style.color = '#1E40AF';
+                      notification.style.border = '1px solid #93C5FD';
+                  }
+                  setTimeout(() => notification.classList.remove('show'), 8000);
+              }
 
-                    connectWalletBtn.disabled = true;
-                    connectWalletBtn.innerHTML = `<span class="animate-pulse text-purple-700 font-bold">Connecting...</span>`;
-                    
-                    try {
-                        await modal.open();
-                    } catch (error) {
-                        console.error('Connection error:', error);
-                        showNotification(`Wallet connection failed: ${error.message.substring(0, 100)}`, 'error');
-                        connectWalletBtn.innerHTML = `
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                            <span>Connect Wallet</span>`;
-                        connectWalletBtn.disabled = false;
-                    }
-                }
-                
-                function handleDisconnect() {
-                    state.isWalletConnected = false;
-                    state.walletAddress = null;
-                    state.provider = null;
-                    state.signer = null;
-                    state.batchContract = null;
-                    
-                    state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
-                    erc20Address.value = '';
-                    tokenSymbolDisplay.textContent = '';
-                    approvalSection.classList.add('hidden');
-                    
-                    connectWalletBtn.innerHTML = `
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                        <span>Connect Wallet</span>`;
-                    connectWalletBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'text-white');
-                    connectWalletBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
-                    
-                    farcasterConnectBtn.disabled = true;
-                    appContent.classList.add('hidden');
-                    updateStepIndicator(1);
-                }
+              function updateStepIndicator(step) {
+                  state.currentStep = step;
+                  const steps = [
+                      { id: 'stepCircle1', labelId: 'stepLabel1', label: 'Connect Wallet' },
+                      { id: 'stepCircle2', labelId: 'stepLabel2', label: 'Define Recipients' },
+                      { id: 'stepCircle3', labelId: 'stepLabel3', label: 'Dispatch' }
+                  ];
 
-                // Subscribe to AppKit state changes
-                modal.subscribeState(async (newState) => {
-                    console.log('AppKit state changed:', newState);
-                    
-                    if (newState.open === false && state.isWalletConnected && !newState.selectedNetworkId) {
-                        // Modal closed and disconnected
-                        handleDisconnect();
-                        showNotification('Wallet disconnected.', 'info');
-                        return;
-                    }
+                  steps.forEach((s, index) => {
+                      const stepEl = document.getElementById(s.id);
+                      const labelEl = document.getElementById(s.labelId);
+                      const isActive = (index + 1) === step;
+                      const isCompleted = (index + 1) < step;
 
-                    // Check if we have a connection
-                    const address = modal.getAddress();
-                    const chainId = modal.getChainId();
-                    const isConnected = modal.getIsConnected();
+                      stepEl.className = 'w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300';
+                      labelEl.className = 'text-xs mt-2 text-center transition-colors duration-300';
+                      
+                      if (isActive) {
+                          stepEl.style.backgroundColor = '#6A3CFF';
+                          stepEl.style.color = 'white';
+                          stepEl.classList.add('ring-4', 'ring-opacity-50');
+                          stepEl.style.setProperty('ring-color', '#6A3CFF');
+                          labelEl.classList.add('font-semibold');
+                          labelEl.style.color = '#6A3CFF';
+                      } else if (isCompleted) {
+                          stepEl.style.backgroundColor = 'var(--fc-light-bg)';
+                          stepEl.style.color = '#6A3CFF';
+                          stepEl.classList.remove('ring-4', 'ring-opacity-50');
+                          labelEl.style.color = '#582FD6';
+                          labelEl.classList.add('font-medium');
+                      } else {
+                          stepEl.style.backgroundColor = '#E5E7EB';
+                          stepEl.style.color = '#6B7280';
+                          stepEl.classList.remove('ring-4', 'ring-opacity-50');
+                          labelEl.style.color = '#6B7280';
+                          labelEl.classList.remove('font-semibold');
+                      }
+                  });
+              }
 
-                    if (isConnected && address && !state.isWalletConnected) {
-                        // New connection
-                        if (chainId !== BASE_CHAIN_ID) {
-                            showNotification('Please switch to Base network.', 'error');
-                            await modal.open({ view: 'Networks' });
-                            return;
-                        }
-                        
-                        state.walletAddress = ethers.getAddress(address);
-                        const walletProvider = modal.getWalletProvider();
-                        state.provider = new ethers.BrowserProvider(walletProvider);
-                        state.signer = await state.provider.getSigner();
-                        
-                        if (CONTRACT_ADDRESS && CONTRACT_ABI) {
-                            state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
-                        }
-                        
-                        state.isWalletConnected = true;
-                        updateUI();
-                        showNotification(`Wallet connected on Base: ${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`, 'success');
-                    } else if (!isConnected && state.isWalletConnected) {
-                        // Disconnected
-                        handleDisconnect();
-                    } else if (isConnected && address && state.walletAddress && address.toLowerCase() !== state.walletAddress.toLowerCase()) {
-                        // Account changed
-                        state.walletAddress = ethers.getAddress(address);
-                        state.signer = await state.provider.getSigner();
-                        const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
-                        connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                        showNotification('Account changed.', 'info');
-                    } else if (isConnected && chainId && chainId !== BASE_CHAIN_ID) {
-                        // Wrong network
-                        showNotification('Please switch to Base network.', 'error');
-                        await modal.open({ view: 'Networks' });
-                    } else if (isConnected && chainId === BASE_CHAIN_ID && state.walletAddress) {
-                        // Switched to correct network
-                        const walletProvider = modal.getWalletProvider();
-                        state.provider = new ethers.BrowserProvider(walletProvider);
-                        state.signer = await state.provider.getSigner();
-                        showNotification('Switched to Base network.', 'success');
-                    }
-                });
+              // Client-side encryption POC (Simplified AES for metadata; real FHE would use Zama SDK)
+              function encryptRecipients(recipient) {
+                  const dataString = JSON.stringify(recipients.map(r => ({
+                      a: r.address.toLowerCase(), // address
+                      v: r.amount.toString(),     // value
+                  })));
+                  
+                  // NOTE: In a real FHE scenario, this key would be managed off-chain or by a trusted third party.
+                  // For this POC, we use a simple, fixed key. Replace with dynamic key derivation for security.
+                  const secretKey = 'farsend-private-key-poc'; 
+                  
+                  const ciphertext = CryptoJS.AES.encrypt(dataString, secretKey).toString();
+                  return ciphertext;
+              }
 
-                async function validateERC20Address(address) {
-                    try {
-                        const tokenContract = new ethers.Contract(address, ERC20_ABI, state.provider);
-                        
-                        const [symbol, decimals] = await Promise.all([
-                            tokenContract.symbol(),
-                            tokenContract.decimals()
-                        ]);
+              // --- WEB3 CORE LOGIC (Updated for Wagmi/viem) ---
 
-                        state.tokenInfo = {
-                            address: ethers.getAddress(address),
-                            symbol: symbol,
-                            decimals: Number(decimals),
-                            contract: tokenContract,
-                            allowance: 0n,
-                            requiredAllowance: 0n,
-                        };
+              async function checkAndSwitchChain() {
+                  try {
+                      const chainId = wagmiConfig.state.chainId;
+                      if (chainId !== BASE_CHAIN_ID) {
+                          showNotification('Wallet is on the wrong network. Switching to Base Mainnet...', 'info');
+                          await wagmiConfig.switchChain({ chainId: BASE_CHAIN_ID });
+                      }
+                  } catch (error) {
+                      showNotification('Please manually switch your wallet to Base Mainnet (Chain ID 8453).', 'error');
+                      throw new Error("Wrong network");
+                  }
+              }
 
-                        tokenSymbolDisplay.textContent = state.tokenInfo.symbol;
-                        tokenContractDisplay.textContent = `${state.tokenInfo.address.slice(0, 6)}...${state.tokenInfo.address.slice(-4)}`;
-                        tokenInfoRow.classList.remove('hidden');
-                        showNotification(`Token validated: ${state.tokenInfo.symbol} (${state.tokenInfo.decimals} decimals)`, 'success');
-                        return true;
-                    } catch (error) {
-                        console.error('ERC-20 validation failed:', error);
-                        state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
-                        tokenSymbolDisplay.textContent = 'Invalid';
-                        tokenInfoRow.classList.add('hidden');
-                        showNotification('Invalid ERC-20 contract address or network error.', 'error');
-                        return false;
-                    }
-                }
+              async function handleConnect() {
+                  connectWalletBtn.disabled = true;
+                  connectWalletBtn.innerHTML = `<span class="animate-pulse text-purple-700 font-bold">Connecting...</span>`;
+                  
+                  try {
+                      const connector = wagmiConfig.connectors[0]; // First connector (Farcaster or injected)
+                      const result = await connect(wagmiConfig, { connector });
+                      state.walletAddress = result.accounts[0];
+                      
+                      await checkAndSwitchChain(); // Ensure we are on Base
 
-                async function checkAndPromptApproval() {
-                    if (state.token !== 'ERC20' || !state.tokenInfo.contract || !CONTRACT_ADDRESS) {
-                        approvalSection.classList.add('hidden');
-                        return true;
-                    }
-                    
-                    const totalAmountDecimal = state.recipients.reduce((sum, r) => sum + r.amount, 0);
-                    const totalAmountBN = ethers.parseUnits(totalAmountDecimal.toString(), state.tokenInfo.decimals);
-                    
-                    state.tokenInfo.requiredAllowance = totalAmountBN;
-                    
-                    try {
-                        const allowance = await state.tokenInfo.contract.allowance(state.walletAddress, CONTRACT_ADDRESS);
-                        state.tokenInfo.allowance = allowance;
+                      state.isWalletConnected = true;
+                      const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                      
+                      connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                      connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+                      connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                      connectWalletBtn.disabled = false;
+                      
+                      appContent.classList.remove('hidden');
+                      farcasterConnectBtn.disabled = false; // Enable Farcaster linking after wallet connect
+                      updateStepIndicator(2);
+                      
+                      showNotification(`Wallet connected on Base: ${truncatedAddress}`, 'success');
 
-                        if (allowance >= totalAmountBN) {
-                            approvalSection.classList.add('hidden');
-                            return true;
-                        } else {
-                            approveAmountEl.textContent = totalAmountDecimal.toFixed(state.tokenInfo.decimals > 4 ? 4 : state.tokenInfo.decimals);
-                            approveSymbolEl.textContent = state.tokenInfo.symbol;
-                            approvalMessage.textContent = `The batch sender requires approval to spend ${totalAmountDecimal.toFixed(4)} ${state.tokenInfo.symbol}. Your current allowance is insufficient.`;
-                            approvalSection.classList.remove('hidden');
-                            
-                            return false;
-                        }
-                    } catch (error) {
-                        console.error('Allowance check failed:', error);
-                        showNotification('Failed to check token allowance. See console for details.', 'error');
-                        return false;
-                    }
-                }
+                      // Watch for account changes
+                      watchAccount(wagmiConfig, {
+                          onChange(account) {
+                              if (account.address && account.isConnected) {
+                                  console.log('Account changed to:', account.address);
+                                  state.walletAddress = account.address;
+                                  const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                                  connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                                  showNotification('Account changed.', 'info');
+                                  updateSummary();
+                              } else if (!account.isConnected && state.walletAddress) {
+                                  handleDisconnect();
+                                  showNotification('Wallet disconnected.', 'warning');
+                              }
+                          }
+                      });
 
-                async function handleApprove() {
-                    if (!CONTRACT_ADDRESS) {
-                        showNotification('Contract address not loaded. Please refresh.', 'error');
-                        return;
-                    }
-                    approveBtn.disabled = true;
-                    approveBtn.innerHTML = 'Approving...';
-                    
-                    const amountToApprove = state.tokenInfo.requiredAllowance;
+                  } catch (error) {
+                      console.error('Connection error:', error);
+                      showNotification(`Wallet connection failed: ${error.message.substring(0, 100)}`, 'error');
+                      connectWalletBtn.innerHTML = `
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 0 00-2-2H5a2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 0 00-2-2H9a2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                          <span>Connect Wallet</span>`;
+                      connectWalletBtn.disabled = false;
+                  }
+              }
+              
+              async function handleDisconnect() {
+                  await disconnect(wagmiConfig);
+                  state.isWalletConnected = false;
+                  state.walletAddress = null;
+                  
+                  // Reset token info
+                  state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                  erc20Address.value = '';
+                  tokenSymbolDisplay.textContent = '';
+                  approvalSection.classList.add('hidden');
+                  
+                  connectWalletBtn.innerHTML = `
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 0 00-2-2H5a2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 0 00-2-2H9a2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                      <span>Connect Wallet</span>`;
+                  connectWalletBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'text-white');
+                  connectWalletBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+                  
+                  farcasterConnectBtn.disabled = true;
+                  appContent.classList.add('hidden');
+                  updateStepIndicator(1);
+              }
 
-                    try {
-                        showNotification(`Requesting approval for ${ethers.formatUnits(amountToApprove, state.tokenInfo.decimals)} ${state.tokenInfo.symbol}...`, 'info');
-                        
-                        const contractWithSigner = state.tokenInfo.contract.connect(state.signer);
-                        const tx = await contractWithSigner.approve(CONTRACT_ADDRESS, amountToApprove);
-                        
-                        showNotification(`Approval transaction sent. Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
-                        
-                        await tx.wait();
-                        
-                        showNotification(`Approval confirmed! You can now dispatch the batch.`, 'success');
-                        
-                        state.tokenInfo.allowance = amountToApprove;
-                        approvalSection.classList.add('hidden');
-                        updateSummary();
-                        
-                    } catch (error) {
-                        console.error('Approval failed:', error);
-                        const msg = error.code === 'ACTION_REJECTED' ? 'Transaction rejected by user.' : `Approval failed: ${error.message.substring(0, 100)}`;
-                        showNotification(msg, 'error');
-                    } finally {
-                        approveBtn.disabled = false;
-                        approveBtn.innerHTML = `Approve <span id="approveAmount">0.00</span> <span id="approveSymbol">Token</span>`;
-                    }
-                }
+              async function validateERC20Address(address) {
+                  try {
+                      const tokenContract = { address, abi: ERC20_ABI };
+                      
+                      const [symbol, decimals] = await Promise.all([
+                          readContract(wagmiConfig, { ...tokenContract, functionName: 'symbol' }),
+                          readContract(wagmiConfig, { ...tokenContract, functionName: 'decimals' })
+                      ]);
 
-                // --- DISPATCH LOGIC ---
+                      state.tokenInfo = {
+                          address: getAddress(address),
+                          symbol,
+                          decimals: Number(decimals),
+                          allowance: 0n,
+                          requiredAllowance: 0n,
+                      };
 
-                async function handleDispatch() {
-                    if (!state.signer) return showNotification('Wallet not connected.', 'error');
-                    if (!state.batchContract || !CONTRACT_ADDRESS) return showNotification('Batch contract not loaded. Please refresh the page.', 'error');
+                      tokenSymbolDisplay.textContent = state.tokenInfo.symbol;
+                      tokenContractDisplay.textContent = `${state.tokenInfo.address.slice(0, 6)}...${state.tokenInfo.address.slice(-4)}`;
+                      tokenInfoRow.classList.remove('hidden');
+                      showNotification(`Token validated: ${state.tokenInfo.symbol} (${state.tokenInfo.decimals} decimals)`, 'success');
+                      return true;
+                  } catch (error) {
+                      console.error('ERC-20 validation failed:', error);
+                      state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                      tokenSymbolDisplay.textContent = 'Invalid';
+                      tokenInfoRow.classList.add('hidden');
+                      showNotification('Invalid ERC-20 contract address or network error.', 'error');
+                      return false;
+                  }
+              }
 
-                    dispatchBtn.disabled = true;
-                    loadingSpinner.classList.remove('hidden');
-                    dispatchBtnText.textContent = 'Preparing batch...';
-                    document.getElementById('shieldIcon').classList.add('hidden');
+              async function checkAndPromptApproval() {
+                  // If not an ERC20 token, no approval needed
+                  if (state.token !== 'ERC20' || !state.tokenInfo.address || !CONTRACT_ADDRESS) {
+                      approvalSection.classList.add('hidden');
+                      return true;
+                  }
+                  
+                  // Calculate total amount in BigInt (smallest unit)
+                  const totalAmountDecimal = state.recipients.reduce((sum, r) => sum + r.amount, 0);
+                  const totalAmountBN = parseUnits(totalAmountDecimal.toString(), state.tokenInfo.decimals);
+                  
+                  state.tokenInfo.requiredAllowance = totalAmountBN;
+                  
+                  try {
+                      const allowance = await readContract(wagmiConfig, {
+                          address: state.tokenInfo.address,
+                          abi: ERC20_ABI,
+                          functionName: 'allowance',
+                          args: [state.walletAddress, CONTRACT_ADDRESS],
+                      });
+                      state.tokenInfo.allowance = allowance;
 
-                    const { recipients, token, tokenInfo, batchContract, signer, walletAddress } = state;
+                      if (allowance >= totalAmountBN) {
+                          approvalSection.classList.add('hidden');
+                          return true; // Already approved enough
+                      } else {
+                          // Display approval prompt
+                          const neededAmount = totalAmountBN - allowance;
+                          const neededAmountFormatted = ethers.formatUnits(neededAmount, state.tokenInfo.decimals);
 
-                    try {
-                        if (recipients.length === 0) throw new Error('No recipients defined');
+                          approveAmountEl.textContent = totalAmountDecimal.toFixed(state.tokenInfo.decimals > 4 ? 4 : state.tokenInfo.decimals);
+                          approveSymbolEl.textContent = state.tokenInfo.symbol;
+                          approvalMessage.textContent = `The batch sender requires approval to spend ${totalAmountDecimal.toFixed(4)} ${state.tokenInfo.symbol}. Your current allowance is insufficient.`;
+                          approvalSection.classList.remove('hidden');
+                          
+                          return false; // Approval needed
+                      }
+                  } catch (error) {
+                      console.error('Allowance check failed:', error);
+                      showNotification('Failed to check token allowance. See console for details.', 'error');
+                      return false;
+                  }
+              }
 
-                        const decimals = token === 'ETH' ? 18 : tokenInfo.decimals;
-                        const amounts = recipients.map(r => ethers.parseUnits(r.amount.toString(), decimals));
-                        const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
+              async function handleApprove() {
+                  if (!CONTRACT_ADDRESS) {
+                      showNotification('Contract address not loaded. Please refresh.', 'error');
+                      return;
+                  }
+                  approveBtn.disabled = true;
+                  approveBtn.innerHTML = 'Approving...';
+                  
+                  // Approve the total required amount
+                  const amountToApprove = state.tokenInfo.requiredAllowance;
 
-                        if (token === 'ETH') {
-                            const balance = await state.provider.getBalance(walletAddress);
-                            if (totalAmountBN > balance) {
-                                const required = ethers.formatEther(totalAmountBN);
-                                const available = ethers.formatEther(balance);
-                                throw new Error(`Insufficient ETH balance. Required: ${required} ETH, Available: ${available} ETH`);
-                            }
-                        } else {
-                            if (!tokenInfo.contract) throw new Error('Token contract not initialized');
-                            const allowance = await tokenInfo.contract.allowance(walletAddress, CONTRACT_ADDRESS);
-                            if (allowance < totalAmountBN) {
-                                const required = ethers.formatUnits(totalAmountBN, decimals);
-                                const avail = ethers.formatUnits(allowance, decimals);
-                                throw new Error(`Insufficient allowance for ${tokenInfo.symbol}. Required: ${required}, Current: ${avail}`);
-                            }
-                        }
+                  try {
+                      showNotification(`Requesting approval for total batch amount of ${parseUnits(amountToApprove, state.tokenInfo.decimals)} ${state.tokenInfo.symbol}...`, 'info');
+                      
+                      const txHash = await writeContract(wagmiConfig, {
+                          address: state.tokenInfo.address,
+                          abi: ERC20_ABI,
+                          functionName: 'approve',
+                          args: [CONTRACT_ADDRESS, amountToApprove],
+                      });
+                      
+                      showNotification(`Approval transaction sent. Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${txHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
+                      
+                      await waitForTransactionReceipt(wagmiConfig, { hash: txHash }); // Wait for 1 confirmation
+                      
+                      showNotification(`Approval confirmed! You can now dispatch the batch.`, 'success');
+                      
+                      // Update state and UI
+                      state.tokenInfo.allowance = amountToApprove;
+                      approvalSection.classList.add('hidden');
+                      updateSummary(); // Re-enable dispatch button
+                      
+                  } catch (error) {
+                      console.error('Approval failed:', error);
+                      // Check for user rejection
+                      const msg = error.shortMessage?.includes('rejected') ? 'Transaction rejected by user.' : `Approval failed: ${error.shortMessage || error.message}`;
+                      showNotification(msg, 'error');
+                  } finally {
+                      approveBtn.disabled = false;
+                      approveBtn.innerHTML = `Approve <span id="approveAmount">0.00</span> <span id="approveSymbol">Token</span>`;
+                  }
+              }
 
-                        if (token === 'ERC20') {
-                            const isApproved = await checkAndPromptApproval();
-                            if (!isApproved) {
-                                throw new Error('Token approval required. Please approve before dispatching.');
-                            }
-                        }
+              // --- DISPATCH LOGIC (Updated for Wagmi/viem) ---
 
-                        dispatchBtnText.textContent = 'Requesting transaction signature...';
-                        let tx;
-                        const recipientAddresses = recipients.map(r => r.address);
+              async function handleDispatch() {
+                  if (!state.walletAddress) return showNotification('Wallet not connected.', 'error');
+                  if (!state.batchContract || !CONTRACT_ADDRESS) return showNotification('Batch contract not loaded. Please refresh the page.', 'error');
 
-                        if (token === 'ETH') {
-                            const totalValue = totalAmountBN;
-                            tx = await batchContract.disperseEther(recipientAddresses, amounts, { value: totalValue });
-                        } else {
-                            tx = await batchContract.disperseToken(tokenInfo.address, recipientAddresses, amounts);
-                        }
-                        
-                        showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
+                  dispatchBtn.disabled = true;
+                  loadingSpinner.classList.remove('hidden');
+                  dispatchBtnText.textContent = 'Preparing batch...';
+                  document.getElementById('shieldIcon').classList.add('hidden');
 
-                        const receipt = await tx.wait();
+                  const { recipients, token, tokenInfo, batchContract, walletAddress } = state;
 
-                        if (receipt.status === 1) {
-                             const message = `✅ Success! Batch of ${recipients.length} transfers confirmed.<br>
-                                <a href="${BASE_EXPLORER_URL}/tx/${receipt.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on BaseScan</a>`;
-                            showNotification(message, 'success');
-                            
-                            if (window.confetti) {
-                                window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-                            }
-                            
-                            recipientsTextarea.value = '';
-                            parseAndValidateData('', 'text');
+                  try {
+                      if (recipients.length === 0) throw new Error('No recipients defined');
 
-                        } else {
-                            throw new Error('Transaction reverted on chain. Please check BaseScan for details.');
-                        }
+                      // Pre-flight checks
+                      const decimals = token === 'ETH' ? 18 : tokenInfo.decimals;
+                      const rawAmounts = recipients.map(r => r.amount.toString());
+                      const amounts = rawAmounts.map(a => parseUnits(a, decimals));
+                      const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
 
-                    } catch (error) {
-                        console.error('Dispatch error:', error);
-                        let reason = error.message || 'Unknown error';
-                        
-                        if (error.reason) {
-                            reason = error.reason;
-                        } else if (error.data) {
-                            try {
-                                const hexData = error.data.startsWith('0x') ? error.data : '0x' + error.data;
-                                const iface = new ethers.Interface(CONTRACT_ABI);
-                                const decoded = iface.parseError(hexData);
-                                if (decoded) {
-                                    reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
-                                }
-                            } catch (decodeErr) {
-                                console.error('Revert decode failed:', decodeErr);
-                            }
-                        }
-                        
-                        const msg = error.code === 'ACTION_REJECTED' ? 'Transaction rejected by user.' : `Dispatch failed: ${reason}`;
-                        showNotification(msg, 'error');
-                    } finally {
-                        loadingSpinner.classList.add('hidden');
-                        dispatchBtnText.textContent = 'Dispatch Secure Batch';
-                        document.getElementById('shieldIcon').classList.remove('hidden');
-                        dispatchBtn.disabled = false;
-                        updateSummary();
-                    }
-                }
+                      if (token === 'ETH') {
+                          const balance = await wagmiConfig.publicClient.getBalance({ address: walletAddress });
+                          if (totalAmountBN > balance) {
+                              const required = parseEther(totalAmountBN);
+                              const available = parseEther(balance);
+                              throw new Error(`Insufficient ETH balance. Required: ${required} ETH, Available: ${available} ETH`);
+                          }
+                      } else {
+                          if (!tokenInfo.address) throw new Error('Token contract not initialized');
+                          const allowance = await readContract(wagmiConfig, {
+                              address: tokenInfo.address,
+                              abi: ERC20_ABI,
+                              functionName: 'allowance',
+                              args: [walletAddress, CONTRACT_ADDRESS],
+                          });
+                          if (allowance < totalAmountBN) {
+                              const required = parseUnits(totalAmountBN, decimals);
+                              const avail = parseUnits(allowance, decimals);
+                              throw new Error(`Insufficient allowance for ${tokenInfo.symbol}. Required: ${required}, Current: ${avail}`);
+                          }
+                      }
 
-                // --- UI/Data Functions ---
+                      // ERC-20 Approval Check (Final check before sending)
+                      if (token === 'ERC20') {
+                          const isApproved = await checkAndPromptApproval();
+                          if (!isApproved) {
+                              throw new Error('Token approval required. Please approve before dispatching.');
+                          }
+                      }
 
-                function parseAndValidateData(data, type = 'text') {
-                    let parsedData = [];
-                    let errorCount = 0;
-                    let isCSVHeader = false;
+                      // Send transaction
+                      dispatchBtnText.textContent = 'Requesting transaction signature...';
+                      let txHash;
+                      const recipientAddresses = recipients.map(r => r.address);
 
-                    if (type === 'json') {
-                        try {
-                            parsedData = JSON.parse(data);
-                            parsedData = parsedData.map(item => ({
-                                address: ethers.getAddress(item.address),
-                                amount: parseFloat(item.amount)
-                            })).filter(item => item.address && !isNaN(item.amount) && item.amount > 0);
-                        } catch (e) {
-                            showNotification('Invalid JSON format. Expected array of {address, amount}.', 'error');
-                            return;
-                        }
-                    } else {
-                        const lines = data.trim().split('\n');
-                        if (lines.length > 0 && (lines[0].toLowerCase().includes('address') && lines[0].toLowerCase().includes('amount'))) {
-                            isCSVHeader = true;
-                        }
-                        const startLine = isCSVHeader ? 1 : 0;
+                      if (token === 'ETH') {
+                          const totalValue = totalAmountBN;
+                          txHash = await writeContract(wagmiConfig, {
+                              ...batchContract,
+                              functionName: 'disperseEther',
+                              args: [recipientAddresses, amounts],
+                              value: totalValue,
+                          });
+                      } else {
+                          txHash = await writeContract(wagmiConfig, {
+                              ...batchContract,
+                              functionName: 'disperseToken',
+                              args: [tokenInfo.address, recipientAddresses, amounts],
+                          });
+                      }
+                      
+                      // Transaction Feedback
+                      showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${txHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
 
-                        for (let i = startLine; i < lines.length; i++) {
-                            const line = lines[i].trim();
-                            if (line === '') continue;
+                      // Wait for confirmation
+                      const receipt = await waitForTransactionReceipt(wagmiConfig, { hash: txHash });
 
-                            const parts = line.split(/[\s,]+/).filter(p => p.trim());
-                            
-                            if (parts.length < 2) {
-                                errorCount++;
-                                continue;
-                            }
+                      if (receipt.status === 'success') {
+                           const message = `✅ Success! Batch of ${recipients.length} transfers confirmed.<br>
+                              <a href="${BASE_EXPLORER_URL}/tx/${receipt.transactionHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on BaseScan</a>`;
+                          showNotification(message, 'success');
+                          
+                          // Confetti celebration
+                          if (window.confetti) {
+                              window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                          }
+                          
+                          // Reset form
+                          recipientsTextarea.value = '';
+                          parseAndValidateData('', 'text');
 
-                            let address = parts[0].trim();
-                            let amountStr = parts.slice(1).join(' ').trim();
+                      } else {
+                          throw new Error('Transaction reverted on chain. Please check BaseScan for details.');
+                      }
 
-                            const amount = parseFloat(amountStr);
+                  } catch (error) {
+                      console.error('Dispatch error:', error);
+                      let reason = error.shortMessage || error.message || 'Unknown error';
+                      // Decode revert reason if present
+                      if (error.data) {
+                          try {
+                              const iface = new Interface(CONTRACT_ABI);
+                              const decoded = iface.parseError(error.data);
+                              if (decoded) {
+                                  reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
+                              } else if (error.data.startsWith('0x08c379a0')) {
+                                  const stringData = error.data.slice(10);
+                                  reason = ethers.toUtf8String('0x' + stringData);
+                              }
+                          } catch (decodeErr) {
+                              console.error('Revert decode failed:', decodeErr);
+                          }
+                      }
+                      const msg = error.shortMessage?.includes('rejected') ? 'Transaction rejected by user.' : `Dispatch failed: ${reason}`;
+                      showNotification(msg, 'error');
+                  } finally {
+                      loadingSpinner.classList.add('hidden');
+                      dispatchBtnText.textContent = 'Dispatch Secure Batch';
+                      document.getElementById('shieldIcon').classList.remove('hidden');
+                      dispatchBtn.disabled = false;
+                      updateSummary(); // Re-check state which might re-disable if conditions are not met
+                  }
+              }
 
-                            if (address && amount > 0 && !isNaN(amount)) {
-                                try {
-                                    address = ethers.getAddress(address);
-                                    parsedData.push({ address, amount });
-                                } catch (e) {
-                                    errorCount++;
-                                }
-                            } else {
-                                errorCount++;
-                            }
-                        }
-                    }
-                    
-                    state.recipients = parsedData.filter(item => item.address && item.amount > 0);
 
-                    if (errorCount > 0) {
-                        showNotification(`Parsed ${state.recipients.length} valid recipients. Ignored ${errorCount} invalid lines (check address format or amounts).`, 'info');
-                    } else if (state.recipients.length > 0) {
-                        showNotification(`${state.recipients.length} recipients loaded successfully.`, 'success');
-                    }
+              // --- UI/Data Functions (Completed Parsing & Preview Logic) ---
 
-                    updateSummary();
-                    updatePreview();
-                }
+              function parseAndValidateData(data, type = 'text') {
+                  let parsedData = [];
+                  let errorCount = 0;
+                  let isCSVHeader = false;
 
-                async function updateSummary() {
-                    const count = state.recipients.length;
-                    const total = state.recipients.reduce((sum, item) => sum + item.amount, 0);
-                    
-                    recipientCountEl.textContent = count;
-                    const tokenSymbol = state.tokenInfo.symbol;
-                    totalAmountEl.textContent = `${total.toFixed(4)} ${tokenSymbol}`;
-                    
-                    let isReady = false;
-                    
-                    if (count > 0 && total > 0 && state.isWalletConnected && state.batchContract) {
-                        if (state.token === 'ERC20') {
-                            const isValidToken = state.tokenInfo.address && state.tokenInfo.symbol !== 'ETH';
-                            if (isValidToken) {
-                                const isApproved = await checkAndPromptApproval();
-                                isReady = isApproved;
-                            } else {
-                                isReady = false;
-                                showNotification('Enter a valid ERC-20 contract address to proceed.', 'error');
-                            }
-                        } else {
-                            isReady = true;
-                        }
-                    }
+                  if (type === 'json') {
+                      try {
+                          parsedData = JSON.parse(data);
+                          // Assume JSON array of {address: '0x...', amount: 1.5}
+                          parsedData = parsedData.map(item => ({
+                              address: getAddress(item.address),
+                              amount: parseFloat(item.amount)
+                          })).filter(item => item.address && !isNaN(item.amount) && item.amount > 0);
+                      } catch (e) {
+                          showNotification('Invalid JSON format. Expected array of {address, amount}.', 'error');
+                          return;
+                      }
+                  } else { // text or csv
+                      const lines = data.trim().split('\n');
+                      // Check for CSV header
+                      if (lines.length > 0 && (lines[0].toLowerCase().includes('address') && lines[0].toLowerCase().includes('amount'))) {
+                          isCSVHeader = true;
+                      }
+                      const startLine = isCSVHeader ? 1 : 0;
 
-                    dispatchBtn.disabled = !isReady;
-                    if (isReady && count > 0) {
-                        updateStepIndicator(3);
-                    } else if (state.isWalletConnected && count > 0) {
-                        updateStepIndicator(2);
-                    } else {
-                        updateStepIndicator(1);
-                    }
-                }
+                      for (let i = startLine; i < lines.length; i++) {
+                          const line = lines[i].trim();
+                          if (line === '') continue;
 
-                function updatePreview() {
-                    const dataPreview = document.getElementById('dataPreview');
-                    const previewTableBody = document.getElementById('previewTableBody');
-                    const previewFooter = document.getElementById('previewFooter');
-                    
-                    previewTableBody.innerHTML = '';
-                    
-                    if (state.recipients.length > 0) {
-                        dataPreview.classList.remove('hidden');
-                        const previewData = state.recipients.slice(0, 5);
-                        previewData.forEach(item => {
-                            const row = document.createElement('tr');
-                            const truncatedAddress = `${item.address.slice(0,6)}...${item.address.slice(-4)}`;
-                            row.innerHTML = `<td class="p-1 font-mono">${truncatedAddress}</td><td class="p-1 font-mono text-right">${item.amount.toFixed(4)}</td>`;
-                            previewTableBody.appendChild(row);
-                        });
-                        
-                        if (state.recipients.length > 5) {
-                            previewFooter.classList.remove('hidden');
-                            previewFooter.textContent = `... and ${state.recipients.length - 5} more recipients.`;
-                        } else {
-                            previewFooter.classList.add('hidden');
-                        }
+                          // Split by comma or space (flexible separator)
+                          const parts = line.split(/[\s,]+/).filter(p => p.trim());
+                          
+                          if (parts.length < 2) {
+                              errorCount++;
+                              continue;
+                          }
 
-                    } else {
-                        dataPreview.classList.add('hidden');
-                        previewFooter.classList.add('hidden');
-                    }
-                }
+                          let address = parts[0].trim();
+                          let amountStr = parts.slice(1).join(' ').trim(); // Join rest for amount if multi-word
 
-                document.getElementById('exportListBtn').addEventListener('click', (e) => {
-                    e.preventDefault();
-                    if (state.recipients.length === 0) {
-                        showNotification('No recipients to export.', 'error');
-                        return;
-                    }
-                    const csvContent = 'Address,Amount\n' + state.recipients.map(r => `${r.address},${r.amount}`).join('\n');
-                    const blob = new Blob([csvContent], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'farsend-recipients.csv';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    showNotification('Recipients exported as CSV.', 'success');
-                });
-                
-                // --- EVENT LISTENERS ---
+                          const amount = parseFloat(amountStr);
 
-                connectWalletBtn.addEventListener('click', handleConnect);
-                approveBtn.addEventListener('click', handleApprove);
-                dispatchBtn.addEventListener('click', handleDispatch);
+                          if (address && amount > 0 && !isNaN(amount)) {
+                              try {
+                                  address = getAddress(address); // Validates checksum
+                                  parsedData.push({ address, amount });
+                              } catch (e) {
+                                  errorCount++;
+                              }
+                          } else {
+                              errorCount++;
+                          }
+                      }
+                  }
+                  
+                  state.recipients = parsedData.filter(item => item.address && item.amount > 0);
 
-                farcasterConnectBtn.addEventListener('click', () => {
-                    showNotification('Farcaster Sign-in POC: In a production app, this would initiate a SIWF (Sign-In with Farcaster) flow via your wallet. Identity linked!', 'info');
-                    document.getElementById('farcasterBtnText').textContent = 'Farcaster ID Linked!';
-                    farcasterConnectBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-                    farcasterConnectBtn.classList.add('bg-green-500', 'hover:bg-green-600');
-                    farcasterConnectBtn.disabled = true;
-                });
+                  if (errorCount > 0) {
+                      showNotification(`Parsed ${state.recipients.length} valid recipients. Ignored ${errorCount} invalid lines (check address format or amounts).`, 'info');
+                  } else if (state.recipients.length > 0) {
+                      showNotification(`${state.recipients.length} recipients loaded successfully.`, 'success');
+                  }
 
-                tokenSelect.addEventListener('change', () => {
-                    tokenSelect.classList.add('animate-bounce');
-                    setTimeout(() => tokenSelect.classList.remove('animate-bounce'), 400);
-                    state.token = tokenSelect.value;
-                    if (state.token === 'ERC20') {
-                        erc20InputContainer.classList.remove('hidden');
-                        tokenSymbolDisplay.textContent = 'Enter Address';
-                        tokenInfoRow.classList.add('hidden');
-                        approvalSection.classList.add('hidden');
-                        state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
-                    } else {
-                        erc20InputContainer.classList.add('hidden');
-                        tokenSymbolDisplay.textContent = '';
-                        tokenInfoRow.classList.add('hidden');
-                        approvalSection.classList.add('hidden');
-                        state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
-                    }
-                    updateSummary();
-                });
+                  updateSummary();
+                  updatePreview();
+              }
 
-                erc20Address.addEventListener('input', async (e) => {
-                    const address = e.target.value.trim();
-                    if (address.startsWith('0x') && address.length === 42) {
-                        await validateERC20Address(address);
-                    } else {
-                        tokenSymbolDisplay.textContent = 'Invalid';
-                        tokenInfoRow.classList.add('hidden');
-                        approvalSection.classList.add('hidden');
-                        state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
-                    }
-                    updateSummary();
-                });
+              async function updateSummary() {
+                  const count = state.recipients.length;
+                  const total = state.recipients.reduce((sum, item) => sum + item.amount, 0);
+                  
+                  recipientCountEl.textContent = count;
+                  const tokenSymbol = state.tokenInfo.symbol;
+                  totalAmountEl.textContent = `${total.toFixed(4)} ${tokenSymbol}`;
+                  
+                  let isReady = false;
+                  
+                  if (count > 0 && total > 0 && state.isWalletConnected && state.batchContract) {
+                      if (state.token === 'ERC20') {
+                          const isValidToken = state.tokenInfo.address && state.tokenInfo.symbol !== 'ETH';
+                          if (isValidToken) {
+                              // Check approval for ERC20
+                              const isApproved = await checkAndPromptApproval();
+                              isReady = isApproved;
+                          } else {
+                              // Invalid ERC20 address entered
+                              isReady = false;
+                              showNotification('Enter a valid ERC-20 contract address to proceed.', 'error');
+                          }
+                      } else {
+                          // ETH is ready if connected and recipients exist
+                          isReady = true;
+                      }
+                  }
 
-                recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
-                csvUpload.addEventListener('change', (event) => {
-                    const file = event.target.files[0];
-                    if (!file) return;
+                  dispatchBtn.disabled = !isReady;
+                  if (isReady && count > 0) {
+                      updateStepIndicator(3);
+                  } else if (state.isWalletConnected && count > 0) {
+                      updateStepIndicator(2);
+                  } else {
+                      updateStepIndicator(1);
+                  }
+              }
 
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        recipientsTextarea.value = e.target.result;
-                        let fileType = 'text';
-                        if (file.name.endsWith('.csv')) { fileType = 'text'; }
-                        else if (file.name.endsWith('.json')) { fileType = 'json'; }
-                        parseAndValidateData(e.target.result, fileType);
-                    };
-                    reader.readAsText(file);
-                });
-                
-                // --- INITIALIZATION ---
-                updateStepIndicator(state.currentStep);
-                
-            })();
-        });
+              function updatePreview() {
+                  const dataPreview = document.getElementById('dataPreview');
+                  const previewTableBody = document.getElementById('previewTableBody');
+                  const previewFooter = document.getElementById('previewFooter');
+                  
+                  previewTableBody.innerHTML = '';
+                  
+                  if (state.recipients.length > 0) {
+                      dataPreview.classList.remove('hidden');
+                      // Show first 5 for preview
+                      const previewData = state.recipients.slice(0, 5);
+                      previewData.forEach(item => {
+                          const row = document.createElement('tr');
+                          const truncatedAddress = `${item.address.slice(0,6)}...${item.address.slice(-4)}`;
+                          row.innerHTML = `<td class="p-1 font-mono">${truncatedAddress}</td><td class="p-1 font-mono text-right">${item.amount.toFixed(4)}</td>`;
+                          previewTableBody.appendChild(row);
+                      });
+                      
+                      if (state.recipients.length > 5) {
+                          previewFooter.classList.remove('hidden');
+                          previewFooter.textContent = `... and ${state.recipients.length - 5} more recipients.`;
+                      } else {
+                          previewFooter.classList.add('hidden');
+                      }
+
+                  } else {
+                      dataPreview.classList.add('hidden');
+                      previewFooter.classList.add('hidden');
+                  }
+              }
+
+              // Export functionality (basic CSV download)
+              document.getElementById('exportListBtn').addEventListener('click', (e) => {
+                  e.preventDefault();
+                  if (state.recipients.length === 0) {
+                      showNotification('No recipients to export.', 'error');
+                      return;
+                  }
+                  const csvContent = 'Address,Amount\n' + state.recipients.map(r => `${r.address},${r.amount}`).join('\n');
+                  const blob = new Blob([csvContent], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'farsend-recipients.csv';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  showNotification('Recipients exported as CSV.', 'success');
+              });
+              
+              // --- EVENT LISTENERS ---
+
+              connectWalletBtn.addEventListener('click', handleConnect);
+              approveBtn.addEventListener('click', handleApprove);
+              dispatchBtn.addEventListener('click', handleDispatch);
+
+              farcasterConnectBtn.addEventListener('click', () => {
+                  showNotification('Farcaster Sign-in POC: In a production app, this would initiate a SIWF (Sign-In with Farcaster) flow via your wallet. Identity linked!', 'info');
+                  document.getElementById('farcasterBtnText').textContent = 'Farcaster ID Linked!';
+                  farcasterConnectBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+                  farcasterConnectBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                  farcasterConnectBtn.disabled = true;
+              });
+
+              tokenSelect.addEventListener('change', () => {
+                  tokenSelect.classList.add('animate-bounce');
+                  setTimeout(() => tokenSelect.classList.remove('animate-bounce'), 400);
+                  state.token = tokenSelect.value;
+                  if (state.token === 'ERC20') {
+                      erc20InputContainer.classList.remove('hidden');
+                      tokenSymbolDisplay.textContent = 'Enter Address';
+                      tokenInfoRow.classList.add('hidden');
+                      approvalSection.classList.add('hidden');
+                      // Reset token info to force validation
+                      state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                  } else {
+                      erc20InputContainer.classList.add('hidden');
+                      tokenSymbolDisplay.textContent = '';
+                      tokenInfoRow.classList.add('hidden');
+                      approvalSection.classList.add('hidden');
+                      state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                  }
+                  updateSummary();
+              });
+
+              erc20Address.addEventListener('input', async (e) => {
+                  const address = e.target.value.trim();
+                  if (address.startsWith('0x') && address.length === 42) {
+                      await validateERC20Address(address);
+                  } else {
+                      tokenSymbolDisplay.textContent = 'Invalid';
+                      tokenInfoRow.classList.add('hidden');
+                      approvalSection.classList.add('hidden');
+                      state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                  }
+                  updateSummary();
+              });
+
+              recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
+              csvUpload.addEventListener('change', (event) => {
+                  const file = event.target.files[0];
+                  if (!file) return;
+
+                  const reader = new FileReader();
+                  reader.onload = (e) => {
+                      recipientsTextarea.value = e.target.result;
+                      let fileType = 'text';
+                      if (file.name.endsWith('.csv')) { fileType = 'text'; } // Treat as text with header check
+                      else if (file.name.endsWith('.json')) { fileType = 'json'; }
+                      parseAndValidateData(e.target.result, fileType);
+                  };
+                  reader.readAsText(file);
+              });
+              
+              // --- INITIALIZATION ---
+              updateStepIndicator(state.currentStep);
+              
+          })(); // End of IIFE
+      });
     </script>
 </body>
 </html>
