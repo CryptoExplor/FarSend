@@ -584,10 +584,18 @@
                   const farcasterConnector = connectorsToTry.find(c => c.id === 'farcasterMiniApp');
                   const wcConnector = connectorsToTry.find(c => c.id === 'walletConnect');
 
-                  // FIXED: Set priority as requested: Farcaster -> Injected -> WalletConnect
-                  if (farcasterConnector) prioritizedConnectors.push(farcasterConnector);
-                  if (injectedConnector) prioritizedConnectors.push(injectedConnector);
-                  if (wcConnector) prioritizedConnectors.push(wcConnector);
+                  if (isMiniApp) {
+                      // Farcaster environment: Try Farcaster first, then Injected (if any), then WC
+                      if (farcasterConnector) prioritizedConnectors.push(farcasterConnector);
+                      if (injectedConnector) prioritizedConnectors.push(injectedConnector);
+                  } else {
+                      // Browser environment: Try Injected first, then WC
+                      if (injectedConnector) prioritizedConnectors.push(injectedConnector);
+                  }
+                  // Add WalletConnect as the last resort fallback (if not already added)
+                  if (wcConnector && !prioritizedConnectors.includes(wcConnector)) {
+                      prioritizedConnectors.push(wcConnector);
+                  }
                   
                   // Make sure connectors are unique
                   prioritizedConnectors = [...new Set(prioritizedConnectors)];
