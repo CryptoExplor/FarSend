@@ -274,6 +274,42 @@
     <!-- Notification Area -->
     <div id="notification" class="p-4 rounded-lg text-sm main-card shadow-lg" style="border: 1px solid #A98EFF;"></div>
 
+    <!-- AppKit Initialization -->
+    <script type="module">
+        import { createAppKit } from 'https://unpkg.com/@reown/appkit@latest/dist/index.es.js';
+        import { EthersAdapter } from 'https://unpkg.com/@reown/appkit-adapter-ethers@latest/dist/index.es.js';
+        import { base } from 'https://unpkg.com/@reown/appkit-networks@latest/dist/index.es.js';
+
+        const projectId = 'e0dd881bad824ac3418617434a79f917'; // Replace with your Reown (WalletConnect) Project ID from https://dashboard.reown.com
+        // Note: No separate AppKit auth API key is required; the projectId handles authentication.
+
+        const metadata = {
+            name: 'FarSend',
+            description: 'Private Batch Sender on Base',
+            url: window.location.origin,
+            icons: ['https://farsend.vercel.app/icon.png'] // Add your app icon URL
+        };
+
+        const networks = [base];
+
+        const adapter = new EthersAdapter({
+            projectId,
+            networks
+        });
+
+        const modal = createAppKit({
+            adapters: [adapter],
+            networks,
+            metadata,
+            projectId,
+            features: {
+                analytics: true // Optional
+            }
+        });
+
+        window.modal = modal;
+    </script>
+
     <script>
         // Wait for all deferred scripts to load before initializing
         window.addEventListener('load', async () => {
@@ -287,12 +323,18 @@
                 console.error('CryptoJS not loaded');
                 return;
             }
+            if (typeof window.modal === 'undefined') {
+                console.error('AppKit modal not initialized');
+                document.getElementById('connectWalletBtn').innerHTML = '<span style="color: red;">Error: AppKit failed to load. Please refresh and check Project ID.</span>';
+                return;
+            }
 
             // Use an IIFE for encapsulation and to use async/await
             (async () => {
                 // --- CONSTANTS & CONFIGURATION ---
-                const { ethers, CryptoJS } = window;
-                const BASE_CHAIN_ID = '8453'; // Base Mainnet
+                const { ethers } = window;
+                const modal = window.modal;
+                const BASE_CHAIN_ID = 8453;
                 const BASE_EXPLORER_URL = 'https://basescan.org';
 
                 // Load Base Contract Config (with localStorage caching)
@@ -440,8 +482,20 @@
                     });
                 }
 
+                function updateUI() {
+                    const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                    
+                    connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                    connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+                    connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                    
+                    appContent.classList.remove('hidden');
+                    farcasterConnectBtn.disabled = false;
+                    updateStepIndicator(2);
+                }
+
                 // Client-side encryption POC (Simplified AES for metadata; real FHE would use Zama SDK)
-                function encryptRecipients(recipients) {
+                function encryptRecipients(recipient) {
                     const dataString = JSON.stringify(recipients.map(r => ({
                         a: r.address.toLowerCase(), // address
                         v: r.amount.toString(),     // value
@@ -458,38 +512,18 @@
                 // --- WEB3 CORE LOGIC ---
 
                 async function checkAndSwitchChain() {
-                    try {
-                        const chainId = await state.provider.send('eth_chainId');
-                        if (chainId !== BASE_CHAIN_ID) {
-                            showNotification('Wallet is on the wrong network. Switching to Base Mainnet...', 'info');
-                            await window.ethereum.request({
-                                method: 'wallet_switchEthereumChain',
-                                params: [{ chainId: BASE_CHAIN_ID }],
-                            });
-                            // Wait for chain switch (re-check in connectWallet is safer)
-                        }
-                    } catch (error) {
-                        if (error.code === 4902) { // Chain not added
-                            await window.ethereum.request({
-                                method: 'wallet_addEthereumChain',
-                                params: [{
-                                    chainId: BASE_CHAIN_ID,
-                                    chainName: 'Base',
-                                    rpcUrls: ['https://mainnet.base.org'],
-                                    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-                                    blockExplorerUrls: [BASE_EXPLORER_URL]
-                                }]
-                            });
-                        } else {
-                            showNotification('Please manually switch your wallet to Base Mainnet (Chain ID 8453).', 'error');
-                            throw new Error("Wrong network");
-                        }
-                    }
+                    // AppKit enforces the configured networks, so chain switch is handled in modal
+                    // If needed, open network modal: modal.open({ view: 'Networks' });
+                    console.log('Chain check: AppKit handles network selection');
                 }
 
                 async function handleConnect() {
-                    if (!window.ethereum) {
-                        showNotification('Injected Web3 provider (e.g., MetaMask) not found.', 'error');
+                    if (state.isWalletConnected) {
+                        try {
+                            await modal.disconnect();
+                        } catch (error) {
+                            console.error('Disconnect error:', error);
+                        }
                         return;
                     }
 
@@ -497,39 +531,8 @@
                     connectWalletBtn.innerHTML = `<span class="animate-pulse text-purple-700 font-bold">Connecting...</span>`;
                     
                     try {
-                        state.provider = new ethers.BrowserProvider(window.ethereum);
-                        
-                        // Request account access
-                        const accounts = await state.provider.send("eth_requestAccounts", []);
-                        state.walletAddress = ethers.getAddress(accounts[0]);
-                        
-                        await checkAndSwitchChain(); // Ensure we are on Base
-
-                        state.signer = await state.provider.getSigner();
-                        if (CONTRACT_ADDRESS && CONTRACT_ABI) {
-                            state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
-                        } else {
-                            throw new Error('Contract configuration not loaded. Please refresh the page.');
-                        }
-
-                        state.isWalletConnected = true;
-                        const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
-                        
-                        connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                        connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
-                        connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
-                        connectWalletBtn.disabled = false;
-                        
-                        appContent.classList.remove('hidden');
-                        farcasterConnectBtn.disabled = false; // Enable Farcaster linking after wallet connect
-                        updateStepIndicator(2);
-                        
-                        // Listen for account/chain changes
-                        window.ethereum.on('accountsChanged', handleAccountsChanged);
-                        window.ethereum.on('chainChanged', handleChainChanged);
-
-                        showNotification(`Wallet connected on Base: ${truncatedAddress}`, 'success');
-
+                        await modal.open();
+                        // Connection handled by subscribeEvents
                     } catch (error) {
                         console.error('Connection error:', error);
                         showNotification(`Wallet connection failed: ${error.message.substring(0, 100)}`, 'error');
@@ -540,29 +543,10 @@
                     }
                 }
                 
-                function handleAccountsChanged(accounts) {
-                    if (accounts.length === 0) {
-                        handleDisconnect();
-                    } else {
-                        state.walletAddress = ethers.getAddress(accounts[0]);
-                        showNotification('Wallet account changed. Interface updated.', 'info');
-                        handleConnect(); // Re-initialize to get new signer
-                    }
-                }
-
-                function handleChainChanged(chainId) {
-                    if (chainId !== BASE_CHAIN_ID) {
-                        handleDisconnect();
-                        showNotification('Network changed. Please connect again on Base Mainnet.', 'error');
-                    } else {
-                        showNotification('Network switched to Base. Reconnecting...', 'info');
-                        handleConnect(); // Re-initialize after chain switch
-                    }
-                }
-
                 function handleDisconnect() {
                     state.isWalletConnected = false;
                     state.walletAddress = null;
+                    state.provider = null;
                     state.signer = null;
                     state.batchContract = null;
                     
@@ -582,6 +566,57 @@
                     appContent.classList.add('hidden');
                     updateStepIndicator(1);
                 }
+
+                // Subscribe to AppKit events
+                modal.subscribeEvents(async (payload) => {
+                    const { type, params } = payload;
+                    switch (type) {
+                        case 'CONNECT_SUCCESS':
+                            const { chainId, address } = params;
+                            if (parseInt(chainId, 16) !== BASE_CHAIN_ID) {
+                                showNotification('Please select Base network in the modal.', 'error');
+                                await modal.open({ view: 'Networks' });
+                                return;
+                            }
+                            state.walletAddress = ethers.getAddress(address);
+                            const provider = await modal.getProvider({ chainId: BASE_CHAIN_ID });
+                            state.provider = new ethers.BrowserProvider(provider);
+                            state.signer = await state.provider.getSigner();
+                            if (CONTRACT_ADDRESS && CONTRACT_ABI) {
+                                state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
+                            }
+                            state.isWalletConnected = true;
+                            updateUI();
+                            showNotification(`Wallet connected on Base: ${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`, 'success');
+                            break;
+                        case 'DISCONNECT_SUCCESS':
+                            handleDisconnect();
+                            showNotification('Wallet disconnected.', 'info');
+                            break;
+                        case 'CHAIN_CHANGED':
+                            const newChainId = parseInt(params.chainId, 16);
+                            if (newChainId !== BASE_CHAIN_ID) {
+                                showNotification('Switched to non-Base chain. Please switch to Base.', 'error');
+                                await modal.open({ view: 'Networks' });
+                            } else {
+                                showNotification('Switched to Base.', 'info');
+                                // Re-init signer
+                                state.signer = await state.provider.getSigner();
+                            }
+                            break;
+                        case 'ACCOUNT_CHANGED':
+                            if (params.addresses.length === 0) {
+                                handleDisconnect();
+                            } else {
+                                state.walletAddress = ethers.getAddress(params.addresses[0]);
+                                state.signer = await state.provider.getSigner();
+                                const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                                connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                                showNotification('Account changed.', 'info');
+                            }
+                            break;
+                    }
+                });
 
                 async function validateERC20Address(address) {
                     try {
@@ -638,9 +673,6 @@
                             return true; // Already approved enough
                         } else {
                             // Display approval prompt
-                            const neededAmount = totalAmountBN - allowance;
-                            const neededAmountFormatted = ethers.formatUnits(neededAmount, state.tokenInfo.decimals);
-
                             approveAmountEl.textContent = totalAmountDecimal.toFixed(state.tokenInfo.decimals > 4 ? 4 : state.tokenInfo.decimals);
                             approveSymbolEl.textContent = state.tokenInfo.symbol;
                             approvalMessage.textContent = `The batch sender requires approval to spend ${totalAmountDecimal.toFixed(4)} ${state.tokenInfo.symbol}. Your current allowance is insufficient.`;
@@ -712,8 +744,7 @@
 
                         // Pre-flight checks
                         const decimals = token === 'ETH' ? 18 : tokenInfo.decimals;
-                        const rawAmounts = recipients.map(r => r.amount.toString());
-                        const amounts = rawAmounts.map(a => ethers.parseUnits(a, decimals));
+                        const amounts = recipients.map(r => ethers.parseUnits(r.amount.toString(), decimals));
                         const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
 
                         if (token === 'ETH') {
