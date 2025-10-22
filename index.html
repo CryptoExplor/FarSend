@@ -7,9 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Ethers.js removed; switching to Wagmi/viem for Farcaster integration -->
     <!-- Crypto-JS for FHE Proof-of-Concept (client-side encryption) -->
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <!-- Canvas Confetti for celebrations -->
-    <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,14 +18,14 @@
     <!-- Farcaster Mini App Metadata -->
     <meta name="fc:miniapp" content='{
       "version":"1",
-      "imageUrl":"https://farsend.example.com/image.png", // Replace with your image URL
+      "imageUrl":"https://farsend.vercel.app/image.png",
       "button":{
         "title":"FarSend",
         "action":{
           "type":"launch_miniapp",
-          "name":"SEND",
-          "url":"https://farsend.example.com", // Replace with your app URL
-          "splashImageUrl":"https://farsend.example.com/splash.png", // Replace with splash image
+          "name":"FarSend",
+          "url":"https://farsend.vercel.app",
+          "splashImageUrl":"https://farsend.vercel.app/splash.png",
           "splashBackgroundColor":"#6A3CFF"
         }
       }
@@ -310,14 +310,16 @@
       } from 'https://esm.sh/@wagmi/core';
       import { base } from 'https://esm.sh/@wagmi/core/chains';
       import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
-      import { injected } from 'https://esm.sh/@wagmi/connectors';
-      import { parseEther, parseUnits, getAddress, Interface } from 'https://esm.sh/viem';
+      // UPDATED: Import both injected and walletConnect
+      import { injected, walletConnect } from 'https://esm.sh/@wagmi/connectors';
+      import { parseEther, parseUnits, getAddress, decodeErrorResult } from 'https://esm.sh/viem';
 
       // Wait for all deferred scripts to load before initializing
       window.addEventListener('load', async () => {
           // Check if required libraries are loaded
           if (typeof window.CryptoJS === 'undefined') {
               console.error('CryptoJS not loaded');
+              showNotification('CryptoJS failed to load. Please refresh.', 'error');
               return;
           }
 
@@ -327,6 +329,8 @@
               const { CryptoJS } = window;
               const BASE_CHAIN_ID = 8453; // Base Mainnet (number for wagmi/viem)
               const BASE_EXPLORER_URL = 'https://basescan.org';
+              // NEW: WalletConnect Project ID from your sample
+              const WALLETCONNECT_PROJECT_ID = 'e0dd881bad824ac3418617434a79f917';
 
               // Load Base Contract Config (with localStorage caching)
               let CONTRACT_ADDRESS, CONTRACT_ABI;
@@ -353,7 +357,7 @@
                       console.log('✅ Loaded BaseBatchSender:', CONTRACT_ADDRESS);
                   } catch (e) {
                       console.error('❌ Failed loading base.json:', e);
-                      // Proceed with error handling in dispatch
+                      showNotification('Failed to load contract configuration. Please refresh.', 'error');
                   }
               }
               
@@ -390,17 +394,36 @@
                   }
               }
 
-              // Wagmi Config: Use Farcaster connector if in mini app, else injected (MetaMask)
-              const connectors = [];
-              if (isMiniApp) {
-                  connectors.push(farcasterMiniApp(farcasterSdk));
-              } else {
-                  connectors.push(injected());
-              }
+              // --- NEW: Multi-Connector Wagmi Configuration ---
+              const metadata = {
+                  name: 'FarSend',
+                  description: 'Private Batch Sender on Base.',
+                  url: 'https://farsend.vercel.app', // App's URL
+                  icons: ['https://farsend.vercel.app/image.png'], // App's icon
+              };
 
               const wagmiConfig = createConfig({
+                  autoConnect: false, 
                   chains: [base],
-                  connectors,
+                  connectors: [
+                      // 1. Injected (MetaMask, Rabby, etc.) - General browser extensions
+                      injected({}),
+                      
+                      // 2. Farcaster Mini App - Specific to Farcaster environment
+                      // We pass the imported sdk object
+                      farcasterMiniApp(farcasterSdk),
+
+                      // 3. WalletConnect (Universal fallback, shows QR code)
+                      walletConnect({
+                          projectId: WALLETCONNECT_PROJECT_ID,
+                          metadata,
+                          showQrModal: true,
+                          qrModalOptions: {
+                              themeMode: 'dark',
+                              themeVariables: { '--wcm-z-index': '99999' }
+                          }
+                      })
+                  ],
                   transports: {
                       [base.id]: http(),
                   },
@@ -431,6 +454,7 @@
               const approveSymbolEl = document.getElementById('approveSymbol');
 
               // --- APPLICATION STATE (Web3 & App) ---
+              let isConnecting = false; // Prevent double-clicks
               const state = {
                   isWalletConnected: false,
                   walletAddress: null,
@@ -533,6 +557,7 @@
                       if (chainId !== BASE_CHAIN_ID) {
                           showNotification('Wallet is on the wrong network. Switching to Base Mainnet...', 'info');
                           await wagmiConfig.switchChain({ chainId: BASE_CHAIN_ID });
+                          console.log('Switched to Base Mainnet');
                       }
                   } catch (error) {
                       showNotification('Please manually switch your wallet to Base Mainnet (Chain ID 8453).', 'error');
@@ -540,56 +565,122 @@
                   }
               }
 
+              // --- NEW: Rewritten handleConnect function based on sample ---
               async function handleConnect() {
+                  if (isConnecting) return;
+                  isConnecting = true;
+                  
                   connectWalletBtn.disabled = true;
                   connectWalletBtn.innerHTML = `<span class="animate-pulse text-purple-700 font-bold">Connecting...</span>`;
+
+                  let successfulConnection = false;
+                  let lastError = null;
+
+                  // Define connector priority based on environment
+                  const connectorsToTry = wagmiConfig.connectors;
+                  let prioritizedConnectors = [];
+
+                  const injectedConnector = connectorsToTry.find(c => c.id === 'injected');
+                  const farcasterConnector = connectorsToTry.find(c => c.id === 'farcasterMiniApp');
+                  const wcConnector = connectorsToTry.find(c => c.id === 'walletConnect');
+
+                  // FIXED: Set priority as requested: Farcaster -> Injected -> WalletConnect
+                  if (farcasterConnector) prioritizedConnectors.push(farcasterConnector);
+                  if (injectedConnector) prioritizedConnectors.push(injectedConnector);
+                  if (wcConnector) prioritizedConnectors.push(wcConnector);
                   
-                  try {
-                      const connector = wagmiConfig.connectors[0]; // First connector (Farcaster or injected)
-                      const result = await connect(wagmiConfig, { connector });
-                      state.walletAddress = result.accounts[0];
-                      
-                      await checkAndSwitchChain(); // Ensure we are on Base
+                  // Make sure connectors are unique
+                  prioritizedConnectors = [...new Set(prioritizedConnectors)];
+                  console.log('Connector priority:', prioritizedConnectors.map(c => c.id));
 
-                      state.isWalletConnected = true;
-                      const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
-                      
-                      connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                      connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
-                      connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
-                      connectWalletBtn.disabled = false;
-                      
-                      appContent.classList.remove('hidden');
-                      farcasterConnectBtn.disabled = false; // Enable Farcaster linking after wallet connect
-                      updateStepIndicator(2);
-                      
-                      showNotification(`Wallet connected on Base: ${truncatedAddress}`, 'success');
+                  for (const connector of prioritizedConnectors) {
+                      try {
+                          console.log(`Attempting connection with: ${connector.name || connector.id}`);
+                          
+                          const result = await connect(wagmiConfig, { 
+                              connector,
+                              chainId: BASE_CHAIN_ID // Request Base chain
+                          }); 
+                          
+                          console.log('Connected accounts:', result.accounts);
+                          state.walletAddress = result.accounts[0];
 
-                      // Watch for account changes
-                      watchAccount(wagmiConfig, {
-                          onChange(account) {
-                              if (account.address && account.isConnected) {
-                                  console.log('Account changed to:', account.address);
-                                  state.walletAddress = account.address;
-                                  const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
-                                  connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                                  showNotification('Account changed.', 'info');
-                                  updateSummary();
-                              } else if (!account.isConnected && state.walletAddress) {
-                                  handleDisconnect();
-                                  showNotification('Wallet disconnected.', 'warning');
+                          // Check chain *after* connecting
+                          await checkAndSwitchChain(); 
+
+                          state.isWalletConnected = true;
+                          const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                          
+                          connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                          connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+                          connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                          
+                          appContent.classList.remove('hidden');
+                          farcasterConnectBtn.disabled = false;
+                          updateStepIndicator(2);
+                          showNotification(`Wallet connected on Base: ${truncatedAddress}`, 'success');
+
+                          // Set up account watcher
+                          watchAccount(wagmiConfig, {
+                              onChange(account) {
+                                  if (account.address && account.isConnected) {
+                                      console.log('Account changed to:', account.address);
+                                      state.walletAddress = account.address;
+                                      const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                                      connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                                      showNotification('Account changed.', 'info');
+                                      updateSummary();
+                                  } else if (!account.isConnected && state.walletAddress) {
+                                      handleDisconnect();
+                                      showNotification('Wallet disconnected.', 'warning');
+                                  }
                               }
-                          }
-                      });
+                          });
 
-                  } catch (error) {
-                      console.error('Connection error:', error);
-                      showNotification(`Wallet connection failed: ${error.message.substring(0, 100)}`, 'error');
-                      connectWalletBtn.innerHTML = `
-                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 0 00-2-2H5a2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 0 00-2-2H9a2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                          <span>Connect Wallet</span>`;
-                      connectWalletBtn.disabled = false;
+                          successfulConnection = true;
+                          break; // Exit loop on success
+
+                      } catch (error) {
+                          console.error(`Connection with ${connector.name || connector.id} failed:`, error);
+                          lastError = error;
+                          
+                          // If user rejected WalletConnect modal, stop trying
+                          if (connector.id === 'walletConnect' && error.shortMessage?.includes('rejected')) {
+                              break; 
+                          }
+                          // If wrong network, checkAndSwitchChain threw, so we stop
+                          if (error.message?.includes('Wrong network')) {
+                              break; 
+                          }
+                          // Continue to next connector
+                      }
                   }
+
+                  // If loop finishes without success
+                  if (!successfulConnection) {
+                      console.error('All connection attempts failed.', lastError);
+                      let msg = 'Connection failed or rejected.';
+                      if (lastError) {
+                          msg = lastError.shortMessage || lastError.message || msg;
+                      }
+                      
+                      if (msg.includes('Wrong network')) {
+                          msg = 'Please switch your wallet to Base Mainnet (Chain ID 8453).';
+                      } else if (msg.includes('rejected')) {
+                          msg = 'Connection request rejected by user.';
+                      } else if (msg.includes('provider') || msg.includes('No wallet provider')) {
+                           msg = 'No wallet provider detected. Please install MetaMask or use WalletConnect.';
+                      }
+                      
+                      showNotification(msg.length > 100 ? msg.substring(0, 100) + '...' : msg, 'error');
+                      
+                      connectWalletBtn.innerHTML = `
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                          <span>Connect Wallet</span>`;
+                  }
+
+                  connectWalletBtn.disabled = false;
+                  isConnecting = false;
               }
               
               async function handleDisconnect() {
@@ -604,7 +695,7 @@
                   approvalSection.classList.add('hidden');
                   
                   connectWalletBtn.innerHTML = `
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 0 00-2-2H5a2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 0 00-2-2H9a2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                       <span>Connect Wallet</span>`;
                   connectWalletBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'text-white');
                   connectWalletBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
@@ -835,14 +926,14 @@
                       let reason = error.shortMessage || error.message || 'Unknown error';
                       // Decode revert reason if present
                       if (error.data) {
+                          // FIXED: Use viem's decodeErrorResult
                           try {
-                              const iface = new Interface(CONTRACT_ABI);
-                              const decoded = iface.parseError(error.data);
+                              const decoded = decodeErrorResult({
+                                  abi: CONTRACT_ABI,
+                                  data: error.data
+                              });
                               if (decoded) {
-                                  reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
-                              } else if (error.data.startsWith('0x08c379a0')) {
-                                  const stringData = error.data.slice(10);
-                                  reason = ethers.toUtf8String('0x' + stringData);
+                                  reason = `${decoded.errorName}(${decoded.args ? decoded.args.map(arg => arg.toString()).join(', ') : ''})`;
                               }
                           } catch (decodeErr) {
                               console.error('Revert decode failed:', decodeErr);
