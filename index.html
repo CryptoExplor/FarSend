@@ -307,7 +307,7 @@
       import { base } from 'https://esm.sh/@wagmi/core/chains';
       import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
       import { injected, walletConnect } from 'https://esm.sh/@wagmi/connectors';
-      import { parseEther, parseUnits, getAddress, decodeErrorResult } from 'https://esm.sh/viem';
+      import { createPublicClient, parseEther, parseUnits, getAddress, decodeErrorResult } from 'https://esm.sh/viem';
 
       // Wait for all deferred scripts to load before initializing
       window.addEventListener('load', async () => {
@@ -347,6 +347,12 @@
                   }
               }
               
+              // Initialize public client for Base chain
+              const publicClient = createPublicClient({
+                  chain: base,
+                  transport: http()
+              });
+
               // Minimal ABI for ERC-20 interaction
               const ERC20_ABI = [
                   "function name() view returns (string)",
@@ -557,6 +563,15 @@
                       if (isMiniApp) {
                           // In Farcaster Mini App, only use farcasterMiniApp connector
                           connector = farcasterMiniApp(farcasterSdk);
+                          console.log('Attempting connection with farcasterMiniApp');
+                          const conn = await connect(wagmiConfig, { 
+                              connector,
+                              chainId: BASE_CHAIN_ID
+                          });
+                          state.walletAddress = conn.accounts[0];
+                          await checkAndSwitchChain();
+                          successfulConnection = true;
+                          showAddress(state.walletAddress);
                       } else {
                           // Outside Mini App, try injected first, then walletConnect
                           const connectorsToTry = [
@@ -587,22 +602,6 @@
                                   }
                               }
                           }
-                          if (successfulConnection) {
-                              // Skip further processing if connected
-                              connector = null;
-                          }
-                      }
-
-                      if (isMiniApp && connector) {
-                          console.log('Attempting connection with farcasterMiniApp');
-                          const conn = await connect(wagmiConfig, { 
-                              connector,
-                              chainId: BASE_CHAIN_ID
-                          });
-                          state.walletAddress = conn.accounts[0];
-                          await checkAndSwitchChain();
-                          successfulConnection = true;
-                          showAddress(state.walletAddress);
                       }
 
                       if (successfulConnection) {
@@ -805,10 +804,10 @@
                       const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
 
                       if (token === 'ETH') {
-                          const balance = await wagmiConfig.publicClient.getBalance({ address: walletAddress });
+                          const balance = await publicClient.getBalance({ address: walletAddress });
                           if (totalAmountBN > balance) {
-                              const required = parseEther(totalAmountBN);
-                              const available = parseEther(balance);
+                              const required = parseEther(totalAmountBN.toString());
+                              const available = parseEther(balance.toString());
                               throw new Error(`Insufficient ETH balance. Required: ${required} ETH, Available: ${available} ETH`);
                           }
                       } else {
@@ -820,8 +819,8 @@
                               args: [walletAddress, CONTRACT_ADDRESS],
                           });
                           if (allowance < totalAmountBN) {
-                              const required = parseUnits(totalAmountBN, decimals);
-                              const avail = parseUnits(allowance, decimals);
+                              const required = parseUnits(totalAmountBN.toString(), decimals);
+                              const avail = parseUnits(allowance.toString(), decimals);
                               throw new Error(`Insufficient allowance for ${tokenInfo.symbol}. Required: ${required}, Current: ${avail}`);
                           }
                       }
