@@ -607,15 +607,28 @@
               }
 
               async function validateERC20Address(address) {
+                  if (!address.startsWith('0x') || address.length !== 42) {
+                      state.tokenInfo = { address: '', symbol: 'Invalid', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                      tokenSymbolDisplay.textContent = 'Invalid';
+                      tokenInfoRow.classList.add('hidden');
+                      showNotification('Please enter a valid 42-character Ethereum address starting with 0x.', 'error');
+                      return false;
+                  }
                   try {
-                      const tokenContract = { address, abi: ERC20_ABI };
-                      const [symbol, decimals] = await Promise.all([
-                          readContract(wagmiConfig, { ...tokenContract, functionName: 'symbol' }),
-                          readContract(wagmiConfig, { ...tokenContract, functionName: 'decimals' })
+                      const tokenContract = { address: getAddress(address), abi: ERC20_ABI };
+                      console.log('Validating ERC-20 contract at:', address);
+                      const [name, symbol, decimals] = await Promise.all([
+                          readContract(wagmiConfig, { ...tokenContract, functionName: 'name' }).catch(() => ''),
+                          readContract(wagmiConfig, { ...tokenContract, functionName: 'symbol' }).catch(() => ''),
+                          readContract(wagmiConfig, { ...tokenContract, functionName: 'decimals' }).catch(() => 18)
                       ]);
+                      if (!symbol || !decimals) {
+                          throw new Error('Contract does not support required ERC-20 functions');
+                      }
                       state.tokenInfo = {
                           address: getAddress(address),
                           symbol,
+                          name: name || symbol,
                           decimals: Number(decimals),
                           allowance: 0n,
                           requiredAllowance: 0n,
@@ -623,14 +636,15 @@
                       tokenSymbolDisplay.textContent = state.tokenInfo.symbol;
                       tokenContractDisplay.textContent = `${state.tokenInfo.address.slice(0, 6)}...${state.tokenInfo.address.slice(-4)}`;
                       tokenInfoRow.classList.remove('hidden');
-                      showNotification(`Token validated: ${state.tokenInfo.symbol} (${state.tokenInfo.decimals} decimals)`, 'success');
+                      showNotification(`Token validated: ${state.tokenInfo.name} (${state.tokenInfo.symbol}, ${state.tokenInfo.decimals} decimals)`, 'success');
+                      await updateSummary();
                       return true;
                   } catch (error) {
                       console.error('ERC-20 validation failed:', error);
-                      state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                      state.tokenInfo = { address: '', symbol: 'Invalid', decimals: 18, allowance: 0n, requiredAllowance: 0n };
                       tokenSymbolDisplay.textContent = 'Invalid';
                       tokenInfoRow.classList.add('hidden');
-                      showNotification('Invalid ERC-20 contract address or network error.', 'error');
+                      showNotification(`Invalid ERC-20 contract: ${error.message || 'Unable to read contract data'}`, 'error');
                       return false;
                   }
               }
@@ -679,26 +693,26 @@
                   approveBtn.innerHTML = 'Approving...';
                   const amountToApprove = state.tokenInfo.requiredAllowance;
                   try {
-                      showNotification(`Requesting approval for total batch amount of ${formatUnits(amountToApprove, state.tokenInfo.decimals)} ${state.tokenInfo.symbol}...`, 'info');
+                      showNotification(`Requesting approval for ${formatUnits(amountToApprove, state.tokenInfo.decimals)} ${state.tokenInfo.symbol}...`, 'info');
                       const txHash = await writeContract(wagmiConfig, {
                           address: state.tokenInfo.address,
                           abi: ERC20_ABI,
                           functionName: 'approve',
                           args: [CONTRACT_ADDRESS, amountToApprove],
                       });
-                      showNotification(`Approval transaction sent. Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${txHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
+                      showNotification(`Approval transaction sent: <a href="${BASE_EXPLORER_URL}/tx/${txHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
                       await waitForTransactionReceipt(wagmiConfig, { hash: txHash });
                       showNotification(`Approval confirmed! You can now dispatch the batch.`, 'success');
                       state.tokenInfo.allowance = amountToApprove;
                       approvalSection.classList.add('hidden');
-                      updateSummary();
+                      await updateSummary();
                   } catch (error) {
                       console.error('Approval failed:', error);
                       const msg = error.shortMessage?.includes('rejected') ? 'Transaction rejected by user.' : `Approval failed: ${error.shortMessage || error.message}`;
                       showNotification(msg, 'error');
                   } finally {
                       approveBtn.disabled = false;
-                      approveBtn.innerHTML = `Approve <span id="approveAmount">0.00</span> <span id="approveSymbol">Token</span>`;
+                      approveBtn.innerHTML = `Approve <span id="approveAmount">${formatUnits(amountToApprove, state.tokenInfo.decimals)}</span> <span id="approveSymbol">${state.tokenInfo.symbol}</span>`;
                   }
               }
 
@@ -801,7 +815,7 @@
                       dispatchBtnText.textContent = 'Dispatch Batch';
                       document.getElementById('shieldIcon').classList.remove('hidden');
                       dispatchBtn.disabled = false;
-                      updateSummary();
+                      await updateSummary();
                   }
               }
 
@@ -868,7 +882,7 @@
                   let isReady = false;
                   if (count > 0 && total > 0 && state.isWalletConnected && state.batchContract) {
                       if (state.token === 'ERC20') {
-                          const isValidToken = state.tokenInfo.address && state.tokenInfo.symbol !== 'ETH';
+                          const isValidToken = state.tokenInfo.address && state.tokenInfo.symbol !== 'Invalid' && state.tokenInfo.symbol !== 'ETH';
                           if (isValidToken) {
                               const isApproved = await checkAndPromptApproval();
                               isReady = isApproved;
@@ -952,7 +966,7 @@
                       tokenSymbolDisplay.textContent = 'Enter Address';
                       tokenInfoRow.classList.add('hidden');
                       approvalSection.classList.add('hidden');
-                      state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                      state.tokenInfo = { address: '', symbol: 'Invalid', decimals: 18, allowance: 0n, requiredAllowance: 0n };
                   } else {
                       erc20InputContainer.classList.add('hidden');
                       tokenSymbolDisplay.textContent = '';
@@ -964,15 +978,15 @@
               });
               erc20Address.addEventListener('input', async (e) => {
                   const address = e.target.value.trim();
-                  if (address.startsWith('0x') && address.length === 42) {
+                  if (address) {
                       await validateERC20Address(address);
                   } else {
-                      tokenSymbolDisplay.textContent = 'Invalid';
+                      tokenSymbolDisplay.textContent = 'Enter Address';
                       tokenInfoRow.classList.add('hidden');
                       approvalSection.classList.add('hidden');
-                      state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                      state.tokenInfo = { address: '', symbol: 'Invalid', decimals: 18, allowance: 0n, requiredAllowance: 0n };
+                      await updateSummary();
                   }
-                  updateSummary();
               });
               recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
               csvUpload.addEventListener('change', (event) => {
