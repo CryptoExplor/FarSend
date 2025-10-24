@@ -6,9 +6,9 @@
     <title>FarSend - Private Batch Sender</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Ethers.js for wallet and contract interaction -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.15.0/ethers.umd.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.15.0/ethers.umd.min.js"></script>
     <!-- Canvas Confetti for celebrations -->
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -846,7 +846,7 @@
                                     reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
                                 } else if (hexData.startsWith('0x08c379a0')) {
                                     const stringData = hexData.slice(10);
-                                    reason = ethers.toUtf8String('0x's + stringData);
+                                    reason = ethers.toUtf8String('0x' + stringData);
                                 }
                             } catch (decodeErr) {
                                 console.error('Revert decode failed:', decodeErr);
