@@ -6,42 +6,9 @@
     <title>FarSend - Private Batch Sender</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Ethers.js for wallet and contract interaction -->
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.15.0/ethers.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.15.0/ethers.umd.min.js"></script>
     <!-- Canvas Confetti for celebrations -->
-    <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
-    <!-- Reown AppKit for wallet connection -->
-    <script type="module">
-          import { createAppKit } from 'https://cdn.jsdelivr.net/npm/@reown/appkit@1.8.2/+esm';
-          import { EthersAdapter } from 'https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers@1.8.2/+esm';
-
-        // Initialize inside an async IIFE for full browser support
-        (async () => {
-        const appKit = await createAppKit({
-            projectId: 'e0dd881bad824ac3418617434a79f917',
-            networks: [
-            {
-                chainId: 8453, // Base Mainnet
-                name: 'Base',
-          currency: 'ETH',
-          rpcUrl: 'https://mainnet.base.org',
-          explorerUrl: 'https://basescan.org',
-            },
-        ],
-            adapters: [new EthersAdapter()],
-            metadata: {
-                name: 'FarSend',
-                description: 'Batch send ETH and ERC-20 tokens on Base',
-                url: 'https://farsend.vercel.app',
-                icons: ['https://farsend.vercel.app/image.png'],
-            },
-            defaultNetwork: { chainId: 8453 },
-        });
-
-        // Export appKit globally for other scripts
-        window.appKit = appKit;
-        })();
-    </script>
-
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -143,6 +110,13 @@
         #stepIndicator .flex-1.h-0\.5.bg-gray-200.mt-4.mx-2 {
           background: var(--fc-primary);
         }
+
+        /* Reown AppKit Button Styling */
+        appkit-button {
+            /* You can add custom styles here to override the default theme */
+            /* For example, to set a specific width: */
+            /* width: 200px; */
+        }
     </style>
 </head>
 <body class="text-gray-900 min-h-screen flex items-center justify-center p-4">
@@ -162,7 +136,7 @@
             <!-- Progress Stepper UI Component -->
             <div id="stepIndicator" class="flex justify-between items-start mb-8 pb-4 border-b border-gray-100">
                 <div class="flex flex-col items-center flex-1 min-w-0">
-                    <div id="stepCircle1" class="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300" style="background-color: #6A3CFF; color: white; border-color: #6A3CFF; ring-color: #6A3CFF;">
+                    <div id="stepCircle1" class="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 ring-4 ring-opacity-50" style="background-color: #6A3CFF; color: white; border-color: #6A3CFF; ring-color: #6A3CFF;">
                         <span class="font-bold">1</span>
                     </div>
                     <span id="stepLabel1" class="text-xs mt-2 text-center font-semibold" style="color: #6A3CFF;">Connect Wallet</span>
@@ -187,18 +161,16 @@
             
             <!-- Step 1: Wallet Connection & Farcaster POC -->
             <div class="flex flex-col space-y-3 py-2">
-                <!-- Wallet Button -->
-                <div class="flex justify-between items-center">
-                    <h2 class="text-lg font-semibold text-gray-800">Wallet</h2>
-                    <button id="connectWalletBtn" class="w-48 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center space-x-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                        <span>Connect Wallet</span>
-                    </button>
+                <!-- Reown AppKit Wallet Button -->
+                <!-- This web component replaces the old <button id="connectWalletBtn"> -->
+                <div class="flex justify-center items-center">
+                    <appkit-button></appkit-button>
                 </div>
+
                 <!-- Farcaster POC Button -->
-                <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+                <div class="flex justify-between items-center pt-4 border-t border-gray-100">
                     <h2 class="text-lg font-semibold text-gray-800">Farcaster ID (Optional)</h2>
-                    <button id="farcasterConnectBtn" class="w-48 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button id="farcasterConnectBtn" disabled class="w-48 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
                         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18.784 11.232c-.524-.717-1.12-1.385-1.782-2.003L12 3.12 7.004 9.172c-.662.618-1.258 1.286-1.782 2.003-.574.786-.872 1.696-.872 2.656 0 1.986.812 3.844 2.22 5.188 1.408 1.344 3.328 2.084 5.346 2.084 2.018 0 3.938-.74 5.346-2.084 1.408-1.344 2.22-3.202 2.22-5.188 0-.96-.298-1.87-.872-2.656zm-6.784 8.768c-1.334 0-2.586-.534-3.52-1.48s-1.48-2.186-1.48-3.52c0-.68.12-1.34.354-1.966.234-.626.586-1.206 1.054-1.724L12 6.072l6.596 6.54c.468.518.82 1.098 1.054 1.724.234.626.354 1.286.354 1.966 0 1.334-.534 2.586-1.48 3.52s-2.186 1.48-3.52 1.48z" fill="white"/></svg>
                         <span id="farcasterBtnText">Link Farcaster ID</span>
                     </button>
@@ -321,10 +293,39 @@
     <!-- Notification Area -->
     <div id="notification" class="p-4 rounded-lg text-sm main-card shadow-lg" style="border: 1px solid #A98EFF;"></div>
 
-    <!-- Farcaster SDK -->
+    <!-- 
+      REOWN APP KIT & FARCASTER SDK 
+    -->
     <script type="module">
       import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+      import { createAppKit } from 'https://esm.sh/@reown/appkit';
+      import { base } from 'https://esm.sh/@reown/appkit/networks';
+
+      // --- REOWN APP KIT CONFIGURATION ---
+      const projectId = 'e0dd881bad824ac3418617434a79f917';
+      
+      const metadata = {
+        name: 'FarSend',
+        description: 'Send ETH & ERC-20s to multiple addresses, securely on Base.',
+        url: 'https://farsend.vercel.app', // Must match domain in your Reown Cloud project
+        icons: ['https://farsend.vercel.app/image.png'] // Must be absolute URL
+      };
+      
+      const appKit = createAppKit({
+        projectId,
+        metadata,
+        networks: [base], // Specify Base network
+        features: {
+          analytics: true // Enable analytics
+        }
+      });
+      
+      // --- FARCASTER SDK ---
       sdk.actions.ready({ disableNativeGestures: true });
+
+      // --- EXPOSE APPKIT TO MAIN SCRIPT ---
+      // This makes `appKit` available to the script block below
+      window.appKit = appKit;
     </script>
 
     <script>
@@ -333,12 +334,13 @@
             // Check if required libraries are loaded
             if (typeof window.ethers === 'undefined') {
                 console.error('ethers.js not loaded');
-                document.getElementById('connectWalletBtn').innerHTML = '<span style="color: red;">Error: ethers.js failed to load. Please refresh.</span>';
+                document.body.innerHTML = '<h1 style="color: red; text-align: center; margin-top: 50px;">Error: ethers.js failed to load. Please refresh.</h1>';
                 return;
             }
+            // Check if Reown AppKit was initialized
             if (typeof window.appKit === 'undefined') {
-                console.error('Reown AppKit not loaded');
-                document.getElementById('connectWalletBtn').innerHTML = '<span style="color: red;">Error: Reown AppKit failed to load. Please refresh.</span>';
+                 console.error('Reown AppKit not loaded');
+                 document.body.innerHTML = '<h1 style="color: red; text-align: center; margin-top: 50px;">Error: Reown AppKit (WalletConnect) failed to load. Please refresh.</h1>';
                 return;
             }
 
@@ -346,7 +348,9 @@
             (async () => {
                 // --- CONSTANTS & CONFIGURATION ---
                 const { ethers } = window;
-                const BASE_CHAIN_ID = '0x2141'; // Base Mainnet (8453 in hex)
+                const { appKit } = window; // Get AppKit from the module script
+                const BASE_CHAIN_ID_HEX = '0x' + (8453).toString(16); // '0x2105'
+                const BASE_CHAIN_ID_DEC = 8453;
                 const BASE_EXPLORER_URL = 'https://basescan.org';
 
                 // Load Base Contract Config (with localStorage caching)
@@ -388,7 +392,7 @@
                 ];
                 
                 // --- DOM Elements ---
-                const connectWalletBtn = document.getElementById('connectWalletBtn');
+                // const connectWalletBtn = document.getElementById('connectWalletBtn'); // Removed
                 const farcasterConnectBtn = document.getElementById('farcasterConnectBtn');
                 const appContent = document.getElementById('app-content');
                 const tokenSelect = document.getElementById('tokenSelect');
@@ -494,96 +498,74 @@
                     });
                 }
 
-                // --- WEB3 CORE LOGIC ---
+                // --- WEB3 CORE LOGIC (Now driven by AppKit) ---
 
-                async function checkAndSwitchChain() {
-                    try {
-                        const currentNetwork = await window.appKit.getActiveNetwork();
-                        if (currentNetwork.chainId !== 8453) {
-                            showNotification('Wallet is on the wrong network. Switching to Base Mainnet...', 'info');
-                            await window.appKit.switchNetwork({ chainId: 8453 });
-                        }
-                    } catch (error) {
-                        console.error('Network switch error:', error);
-                        showNotification('Please manually switch your wallet to Base Mainnet (Chain ID 8453).', 'error');
-                        throw new Error("Wrong network");
-                    }
-                }
-
-                async function handleConnect() {
-                    connectWalletBtn.disabled = true;
-                    connectWalletBtn.innerHTML = `<span class="animate-pulse text-purple-700 font-bold">Connecting...</span>`;
-                    
-                    try {
-                        // Open Reown AppKit modal for wallet connection
-                        await window.appKit.open();
-                        const session = window.appKit.getActiveSession();
-                        if (!session) throw new Error('No wallet session established');
-
-                        // Get provider and signer using EthersAdapter
-                        state.provider = window.appKit.getEthersProvider();
-                        state.signer = await state.provider.getSigner();
-                        state.walletAddress = await state.signer.getAddress();
-                        state.walletAddress = ethers.getAddress(state.walletAddress);
-
-                        // Ensure on Base Mainnet
-                        await checkAndSwitchChain();
-
-                        if (CONTRACT_ADDRESS && CONTRACT_ABI) {
-                            state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
-                        } else {
-                            throw new Error('Contract configuration not loaded. Please refresh the page.');
-                        }
-
-                        state.isWalletConnected = true;
-                        const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                // This function replaces the old handleConnect, handleAccountsChanged, and handleChainChanged
+                appKit.subscribeAccount(async ({ isConnected, address, chainId }) => {
+                    if (isConnected && address && chainId) {
+                        // Connected state
                         
-                        connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                        connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
-                        connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
-                        connectWalletBtn.disabled = false;
-                        
-                        appContent.classList.remove('hidden');
-                        farcasterConnectBtn.disabled = false;
-                        updateStepIndicator(2);
-                        
-                        // Listen for session changes
-                        window.appKit.subscribe('session_change', async () => {
-                            const session = window.appKit.getActiveSession();
-                            if (!session) {
-                                handleDisconnect();
-                            } else {
-                                state.walletAddress = ethers.getAddress(session.address);
-                                state.signer = await state.provider.getSigner();
-                                showNotification('Wallet account changed. Interface updated.', 'info');
-                                handleConnect();
+                        // Check if on Base network
+                        if (chainId !== BASE_CHAIN_ID_DEC) {
+                            showNotification('Wallet is on the wrong network. Switching to Base...', 'info');
+                            try {
+                                // Request a network switch
+                                await appKit.switchNetwork(BASE_CHAIN_ID_HEX);
+                                // The subscriber will run again after the switch, so we return here
+                                return;
+                            } catch (switchError) {
+                                console.error('Failed to switch network:', switchError);
+                                showNotification('Failed to switch network. Please do it manually in your wallet.', 'error');
+                                handleDisconnect(); // Disconnect if switch fails
+                                return;
                             }
-                        });
-
-                        // Listen for network changes
-                        window.appKit.subscribe('network_change', async () => {
-                            const network = await window.appKit.getActiveNetwork();
-                            if (network.chainId !== 8453) {
-                                handleDisconnect();
-                                showNotification('Network changed. Please connect again on Base Mainnet.', 'error');
-                            } else {
-                                showNotification('Network switched to Base. Reconnecting...', 'info');
-                                handleConnect();
+                        }
+                        
+                        // --- Successfully connected on Base ---
+                        console.log('Wallet connected on Base:', address);
+                        
+                        try {
+                            // Get the Ethers Provider & Signer from AppKit
+                            const ethersProvider = await appKit.getEthersProvider();
+                            if (!ethersProvider) {
+                                throw new Error('Could not get wallet provider from AppKit.');
                             }
-                        });
+                            
+                            state.provider = ethersProvider;
+                            state.signer = await ethersProvider.getSigner();
+                            state.walletAddress = address;
+                            
+                            if (CONTRACT_ADDRESS && CONTRACT_ABI) {
+                                state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
+                            } else {
+                                throw new Error('Contract configuration not loaded. Please refresh.');
+                            }
 
-                        showNotification(`Wallet connected on Base: ${truncatedAddress}`, 'success');
+                            state.isWalletConnected = true;
+                            
+                            // Update UI
+                            appContent.classList.remove('hidden');
+                            farcasterConnectBtn.disabled = false;
+                            updateStepIndicator(2);
+                            
+                            showNotification(`Wallet connected: ${address.slice(0, 6)}...${address.slice(-4)}`, 'success');
+                            updateSummary(); // Re-check approvals and summary
 
-                    } catch (error) {
-                        console.error('Connection error:', error);
-                        showNotification(`Wallet connection failed: ${error.message.substring(0, 100)}`, 'error');
-                        connectWalletBtn.innerHTML = `
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                            <span>Connect Wallet</span>`;
-                        connectWalletBtn.disabled = false;
+                        } catch (error) {
+                            console.error('Error setting up provider:', error);
+                            showNotification(`Error: ${error.message}`, 'error');
+                            handleDisconnect();
+                        }
+
+                    } else if (!isConnected) {
+                        // Disconnected state
+                        if (state.isWalletConnected) { // Only show if we were previously connected
+                            showNotification('Wallet disconnected.', 'info');
+                        }
+                        handleDisconnect();
                     }
-                }
-                
+                });
+
                 function handleDisconnect() {
                     state.isWalletConnected = false;
                     state.walletAddress = null;
@@ -596,23 +578,29 @@
                     tokenSymbolDisplay.textContent = '';
                     approvalSection.classList.add('hidden');
                     
-                    connectWalletBtn.innerHTML = `
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                        <span>Connect Wallet</span>`;
-                    connectWalletBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'text-white');
-                    connectWalletBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
-                    
+                    // Reset UI
                     farcasterConnectBtn.disabled = true;
                     appContent.classList.add('hidden');
                     updateStepIndicator(1);
-
-                    // Disconnect from AppKit
-                    window.appKit.disconnect();
+                    dispatchBtn.disabled = true;
                 }
 
                 async function validateERC20Address(address) {
+                    // We need a provider to check this. Use state.provider if connected, 
+                    // otherwise create a temporary one
+                    let localProvider = state.provider;
+                    if (!localProvider) {
+                         try {
+                            const rpcUrl = 'https://mainnet.base.org';
+                            localProvider = new ethers.JsonRpcProvider(rpcUrl);
+                        } catch (e) {
+                            showNotification('Could not connect to Base network to validate token.', 'error');
+                            return false;
+                        }
+                    }
+
                     try {
-                        const tokenContract = new ethers.Contract(address, ERC20_ABI, state.provider);
+                        const tokenContract = new ethers.Contract(address, ERC20_ABI, localProvider);
                         
                         const [symbol, decimals] = await Promise.all([
                             tokenContract.symbol(),
@@ -623,10 +611,15 @@
                             address: ethers.getAddress(address),
                             symbol: symbol,
                             decimals: Number(decimals),
-                            contract: tokenContract,
+                            contract: tokenContract, // This will be provider-only if not connected
                             allowance: 0n,
                             requiredAllowance: 0n,
                         };
+
+                        // If connected, update the contract instance to use the signer
+                        if(state.signer) {
+                             state.tokenInfo.contract = new ethers.Contract(address, ERC20_ABI, state.signer);
+                        }
 
                         tokenSymbolDisplay.textContent = state.tokenInfo.symbol;
                         tokenContractDisplay.textContent = `${state.tokenInfo.address.slice(0, 6)}...${state.tokenInfo.address.slice(-4)}`;
@@ -644,18 +637,28 @@
                 }
 
                 async function checkAndPromptApproval() {
-                    if (state.token !== 'ERC20' || !state.tokenInfo.contract || !CONTRACT_ADDRESS) {
+                    if (state.token !== 'ERC20' || !state.tokenInfo.contract || !CONTRACT_ADDRESS || !state.walletAddress) {
                         approvalSection.classList.add('hidden');
                         return true;
                     }
                     
                     const totalAmountDecimal = state.recipients.reduce((sum, r) => sum + r.amount, 0);
+                    if (totalAmountDecimal === 0) {
+                         approvalSection.classList.add('hidden');
+                         return true; // No approval needed for 0 amount
+                    }
                     const totalAmountBN = ethers.parseUnits(totalAmountDecimal.toString(), state.tokenInfo.decimals);
                     
                     state.tokenInfo.requiredAllowance = totalAmountBN;
                     
                     try {
-                        const allowance = await state.tokenInfo.contract.allowance(state.walletAddress, CONTRACT_ADDRESS);
+                        // Ensure contract is connected to a provider
+                        let contractForAllowance = state.tokenInfo.contract;
+                        if(!contractForAllowance.provider) {
+                            contractForAllowance = contractForAllowance.connect(state.provider);
+                        }
+
+                        const allowance = await contractForAllowance.allowance(state.walletAddress, CONTRACT_ADDRESS);
                         state.tokenInfo.allowance = allowance;
 
                         if (allowance >= totalAmountBN) {
@@ -684,6 +687,11 @@
                         showNotification('Contract address not loaded. Please refresh.', 'error');
                         return;
                     }
+                    if (!state.signer || !state.tokenInfo.contract) {
+                         showNotification('Wallet not connected or token not set.', 'error');
+                        return;
+                    }
+
                     approveBtn.disabled = true;
                     approveBtn.innerHTML = 'Approving...';
                     
@@ -692,6 +700,7 @@
                     try {
                         showNotification(`Requesting approval for total batch amount of ${ethers.formatUnits(amountToApprove, state.tokenInfo.decimals)} ${state.tokenInfo.symbol}...`, 'info');
                         
+                        // Ensure the contract instance is connected to the signer
                         const contractWithSigner = state.tokenInfo.contract.connect(state.signer);
                         const tx = await contractWithSigner.approve(CONTRACT_ADDRESS, amountToApprove);
                         
@@ -712,6 +721,10 @@
                     } finally {
                         approveBtn.disabled = false;
                         approveBtn.innerHTML = `Approve <span id="approveAmount">0.00</span> <span id="approveSymbol">Token</span>`;
+                        // Re-fetch formatted amount
+                        const totalAmountDecimal = state.recipients.reduce((sum, r) => sum + r.amount, 0);
+                        approveAmountEl.textContent = totalAmountDecimal.toFixed(state.tokenInfo.decimals > 4 ? 4 : state.tokenInfo.decimals);
+                        approveSymbolEl.textContent = state.tokenInfo.symbol;
                     }
                 }
 
@@ -745,7 +758,17 @@
                             }
                         } else {
                             if (!tokenInfo.contract) throw new Error('Token contract not initialized');
-                            const allowance = await tokenInfo.contract.allowance(walletAddress, CONTRACT_ADDRESS);
+                            // Use a provider-connected contract for balance check
+                            const balanceContract = tokenInfo.contract.connect(state.provider);
+                            const balance = await balanceContract.balanceOf(walletAddress);
+                            if (totalAmountBN > balance) {
+                                const required = ethers.formatUnits(totalAmountBN, decimals);
+                                const available = ethers.formatUnits(balance, decimals);
+                                throw new Error(`Insufficient ${tokenInfo.symbol} balance. Required: ${required}, Available: ${available}`);
+                            }
+
+                            // Allowance check
+                            const allowance = await tokenInfo.contract.connect(state.provider).allowance(walletAddress, CONTRACT_ADDRESS);
                             if (allowance < totalAmountBN) {
                                 const required = ethers.formatUnits(totalAmountBN, decimals);
                                 const avail = ethers.formatUnits(allowance, decimals);
@@ -823,7 +846,7 @@
                                     reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
                                 } else if (hexData.startsWith('0x08c379a0')) {
                                     const stringData = hexData.slice(10);
-                                    reason = ethers.toUtf8String('0x' + stringData);
+                                    reason = ethers.toUtf8String('0x's + stringData);
                                 }
                             } catch (decodeErr) {
                                 console.error('Revert decode failed:', decodeErr);
@@ -920,21 +943,35 @@
                         if (state.token === 'ERC20') {
                             const isValidToken = state.tokenInfo.address && state.tokenInfo.symbol !== 'ETH';
                             if (isValidToken) {
+                                // Ensure contract has a signer if we need to check approval
+                                if(!state.tokenInfo.contract.provider) {
+                                     state.tokenInfo.contract = state.tokenInfo.contract.connect(state.provider);
+                                }
+                                if(!state.tokenInfo.contract.signer) {
+                                     state.tokenInfo.contract = state.tokenInfo.contract.connect(state.signer);
+                                }
                                 const isApproved = await checkAndPromptApproval();
                                 isReady = isApproved;
                             } else {
                                 isReady = false;
-                                showNotification('Enter a valid ERC-20 contract address to proceed.', 'error');
+                                if(state.recipients.length > 0) {
+                                    showNotification('Enter a valid ERC-20 contract address to proceed.', 'error');
+                                }
                             }
                         } else {
+                            approvalSection.classList.add('hidden'); // Hide approval if switching back to ETH
                             isReady = true;
                         }
+                    } else {
+                         approvalSection.classList.add('hidden');
                     }
 
                     dispatchBtn.disabled = !isReady;
                     if (isReady && count > 0) {
                         updateStepIndicator(3);
                     } else if (state.isWalletConnected && count > 0) {
+                         updateStepIndicator(2);
+                    } else if (state.isWalletConnected) {
                         updateStepIndicator(2);
                     } else {
                         updateStepIndicator(1);
@@ -989,7 +1026,7 @@
                 
                 // --- EVENT LISTENERS ---
 
-                connectWalletBtn.addEventListener('click', handleConnect);
+                // connectWalletBtn.addEventListener('click', handleConnect); // Removed
                 approveBtn.addEventListener('click', handleApprove);
                 dispatchBtn.addEventListener('click', handleDispatch);
 
