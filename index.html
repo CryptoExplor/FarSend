@@ -13,30 +13,35 @@
     <script type="module">
           import { createAppKit } from 'https://cdn.jsdelivr.net/npm/@reown/appkit@1.8.2/+esm';
           import { EthersAdapter } from 'https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers@1.8.2/+esm';
-        
-        // Initialize Reown AppKit
+
+        // Initialize inside an async IIFE for full browser support
+        (async () => {
         const appKit = await createAppKit({
             projectId: 'e0dd881bad824ac3418617434a79f917',
-            networks: [{
+            networks: [
+            {
                 chainId: 8453, // Base Mainnet
                 name: 'Base',
-                currency: 'ETH',
-                rpcUrl: 'https://mainnet.base.org',
-                explorerUrl: 'https://basescan.org'
-            }],
+          currency: 'ETH',
+          rpcUrl: 'https://mainnet.base.org',
+          explorerUrl: 'https://basescan.org',
+            },
+        ],
             adapters: [new EthersAdapter()],
             metadata: {
                 name: 'FarSend',
                 description: 'Batch send ETH and ERC-20 tokens on Base',
                 url: 'https://farsend.vercel.app',
-                icons: ['https://farsend.vercel.app/image.png']
+                icons: ['https://farsend.vercel.app/image.png'],
             },
-            defaultNetwork: { chainId: 8453 }
+            defaultNetwork: { chainId: 8453 },
         });
-        
-        // Export appKit for use in main script
+
+        // Export appKit globally for other scripts
         window.appKit = appKit;
+        })();
     </script>
+
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
