@@ -6,7 +6,7 @@
       "permanent": false
     }
   ],
-  "rewrites": [
+  "redirects": [
     {
       "source": "/",
       "destination": "/splash.html"
