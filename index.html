@@ -1138,6 +1138,44 @@
                             await updateSummary();
                         }
 
+                        // --- NEW: Add accountsChanged listener ---
+                        eip1193Provider.on('accountsChanged', async (accounts) => {
+                            if (accounts.length === 0) {
+                                showNotification('Wallet disconnected or no accounts available.', 'info');
+                                handleDisconnect();
+                                return;
+                            }
+
+                            const newAddress = ethers.getAddress(accounts[0]);
+                            // Null check for state.walletAddress to prevent comparison errors
+                            if (state.isWalletConnected && state.walletAddress && newAddress.toLowerCase() !== state.walletAddress.toLowerCase()) {
+                                showNotification('Wallet account changed.', 'info');
+
+                                // Update state with new account
+                                state.walletAddress = newAddress;
+                                const ethersProvider = new ethers.BrowserProvider(eip1193Provider);
+                                state.signer = await ethersProvider.getSigner();
+                                state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
+
+                                // Update UI
+                                const truncatedAddress = `${newAddress.slice(0, 6)}...${newAddress.slice(-4)}`;
+                                connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                                connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700', 'bg-red-500', 'hover:bg-red-600');
+                                connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                                connectWalletBtn.disabled = false;
+
+                                appContent.classList.remove('hidden');
+                                farcasterConnectBtn.disabled = false;
+                                updateStepIndicator(2);
+
+                                // Re-validate ERC-20 token if applicable
+                                if (state.token === 'ERC20' && ethers.isAddress(erc20Address.value)) {
+                                    await validateERC20Address(erc20Address.value);
+                                }
+                                await updateSummary();
+                            }
+                        });
+
                     } catch (error) {
                         console.error('Subscriber error:', error);
                         showNotification(`Connection failed: ${error.message.substring(0, 100)}`, 'error');
