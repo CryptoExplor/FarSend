@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FarSend - Loading</title>
+
+    <!-- Basic Meta -->
+    <meta name="title" content="FarSend - Private Batch Sender">
+    <meta name="description" content="Send ETH to multiple wallets privately and securely on Base. Built for Farcaster & Base Mini Apps.">
+
+    <!-- Farcaster & OpenGraph Meta -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://farsend.vercel.app/">
+    <meta property="og:title" content="FarSend - Private Batch Sender for ETH">
+    <meta property="og:description" content="Batch-send ETH to multiple wallets with privacy and security. Perfect for airdrops, rewards, and stealth transfers.">
+    <meta property="og:image" content="https://farsend.vercel.app/splash.png">
+
+    <!-- Twitter Meta -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="FarSend - Private Batch Sender for ETH">
+    <meta name="twitter:description" content="Batch-send ETH to multiple wallets with privacy and security. Perfect for airdrops, rewards, and stealth transfers.">
+    <meta name="twitter:image" content="https://farsend.vercel.app/splash.png">
+
+    <!-- Farcaster Frame Meta -->
+    <meta name="farcaster:image" content="https://farsend.vercel.app/splash.png">
+    <meta property="fc:frame" content="vNext">
+    <meta property="fc:frame:image" content="https://farsend.vercel.app/splash.png">
+
+    <!-- Farcaster Mini App Metadata -->
+    <meta name="fc:miniapp" content='{
+      "version":"1",
+      "imageUrl":"https://farsend.vercel.app/image.png",
+      "button":{
+        "title":"FarSend",
+        "action":{
+          "type":"launch_miniapp",
+          "name":"FarSend",
+          "url":"https://farsend.vercel.app",
+          "splashImageUrl":"https://farsend.vercel.app/splash.png",
+          "splashBackgroundColor":"#6A3CFF"
+        }
+      }
+    }'>
+
+    <!-- Favicon & Icons -->
+    <link rel="icon" type="image/png" href="/icon.png">
+    <link rel="apple-touch-icon" href="/icon.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+
+    <!-- PWA Meta -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FarSend">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1f2121">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+
+    <style>
+        :root {
+            --color-teal-300: rgba(50, 184, 198, 1);
+            --color-teal-500: rgba(33, 128, 141, 1);
+            --color-charcoal-700: rgba(31, 33, 33, 1);
+            --color-slate-900: rgba(19, 52, 59, 1);
+            --color-gray-200: rgba(245, 245, 245, 1);
+            --color-farcaster-purple: rgba(50, 184, 198, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--color-charcoal-700) 0%, var(--color-slate-900) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Animated grid background */
+        .grid-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(50, 184, 198, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(50, 184, 198, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+            opacity: 0.5;
+        }
+
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+
+        /* Particle nodes */
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: var(--color-farcaster-purple);
+            border-radius: 50%;
+            opacity: 0;
+            animation: particleFloat 3s ease-in-out infinite;
+        }
+
+        .particle:nth-child(1) { left: 10%; top: 20%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 80%; top: 30%; animation-delay: 0.5s; }
+        .particle:nth-child(3) { left: 30%; top: 70%; animation-delay: 1s; }
+        .particle:nth-child(4) { left: 70%; top: 60%; animation-delay: 1.5s; }
+        .particle:nth-child(5) { left: 50%; top: 10%; animation-delay: 2s; }
+        .particle:nth-child(6) { left: 20%; top: 80%; animation-delay: 2.5s; }
+
+        @keyframes particleFloat {
+            0%, 100% { opacity: 0; transform: translateY(0); }
+            50% { opacity: 0.6; transform: translateY(-20px); }
+        }
+
+        /* Main container */
+        .splash-container {
+            text-align: center;
+            z-index: 10;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Paper airplane icon */
+        .airplane-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 32px;
+        }
+
+        .airplane {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: launch 2s ease-in-out infinite;
+        }
+
+        @keyframes launch {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(5px, -5px) rotate(5deg); }
+            75% { transform: translate(-5px, 5px) rotate(-5deg); }
+        }
+
+        /* SVG Paper Airplane */
+        .airplane svg {
+            width: 80px;
+            height: 80px;
+            filter: drop-shadow(0 0 20px var(--color-farcaster-purple));
+        }
+
+        /* Glow effect */
+        .glow-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100px;
+            height: 100px;
+            margin: -50px 0 0 -50px;
+            border: 2px solid var(--color-farcaster-purple);
+            border-radius: 50%;
+            opacity: 0;
+            animation: pulse 2s ease-out infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.8; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        /* Lock/Shield icon */
+        .security-badge {
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            width: 32px;
+            height: 32px;
+            background: var(--color-slate-900);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--color-farcaster-purple);
+            animation: badgePulse 2s ease-in-out infinite;
+        }
+
+        @keyframes badgePulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .security-badge svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Branding */
+        .brand-name {
+            font-size: 36px;
+            font-weight: 600;
+            color: var(--color-farcaster-purple);
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+            animation: slideUp 0.8s ease-out 0.3s both;
+        }
+
+        .brand-tagline {
+            font-size: 14px;
+            color: var(--color-gray-200);
+            opacity: 0.7;
+            margin-bottom: 32px;
+            animation: slideUp 0.8s ease-out 0.5s both;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Loading dots */
+        .loading-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            animation: slideUp 0.8s ease-out 0.7s both;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--color-farcaster-purple);
+            border-radius: 50%;
+            animation: dotBounce 1.4s ease-in-out infinite;
+        }
+
+        .dot:nth-child(1) { animation-delay: 0s; }
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes dotBounce {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1.2); opacity: 1; }
+        }
+
+        /* Loading text */
+        .loading-text {
+            margin-top: 16px;
+            font-size: 12px;
+            color: var(--color-gray-200);
+            opacity: 0.5;
+            animation: slideUp 0.8s ease-out 0.9s both;
+        }
+
+        /* Fade out animation when ready */
+        .splash-container.fade-out {
+            animation: fadeOut 0.5s ease-in forwards;
+        }
+
+        @keyframes fadeOut {
+            to { opacity: 0; transform: scale(0.95); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated background -->
+    <div class="grid-background"></div>
+    
+    <!-- Floating particles -->
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+
+    <!-- Main splash content -->
+    <div class="splash-container" id="splashContainer">
+        <div class="airplane-container">
+            <!-- Glow rings -->
+            <div class="glow-ring"></div>
+            
+            <!-- Paper airplane icon -->
+            <div class="airplane">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-farcaster-purple);"/>
+                    <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-farcaster-purple);"/>
+                </svg>
+            </div>
+
+            <!-- Security badge -->
+            <div class="security-badge">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="var(--color-farcaster-purple)"/>
+                    <path d="M9 12l2 2 4-4" stroke="var(--color-slate-900)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Branding -->
+        <h1 class="brand-name">FarSend</h1>
+        <p class="brand-tagline">Private Batch Sender for ETH and ERC-20 🔒⚡</p>
+
+        <!-- Loading indicator -->
+        <div class="loading-dots">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+        <p class="loading-text">Initializing secure connection...</p>
+    </div>
+
+    <!-- Farcaster SDK -->
+    <script type="module">
+        import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const container = document.getElementById('splashContainer');
+
+            if (window.frame && window.frame.sdk) {
+                try {
+                    // Simulate app initialization (replace with actual logic)
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // 2-second delay for demo
+
+                    // Hide splash when ready
+                    container.classList.add('fade-out');
+
+                    // Notify Farcaster that the app is ready after fade-out
+                    setTimeout(async () => {
+                        await sdk.actions.ready({ disableNativeGestures: true });
+                        console.log('Farcaster Frame SDK ready at 05:25 PM IST on October 25, 2025.');
+                    }, 500); // Match fade-out duration
+                } catch (error) {
+                    console.error('Error initializing Farcaster SDK:', error);
+                }
+            } else {
+                // Fallback for standalone mode
+                setTimeout(() => {
+                    container.classList.add('fade-out');
+                    setTimeout(() => {
+                        window.location.href = 'index.html'; // Redirect to main app
+                    }, 500); // Match fade-out duration
+                }, 2000); // 2-second delay for splash screen
+            }
+        });
+    </script>
+</body>
+</html>
