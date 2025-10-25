@@ -13,6 +13,9 @@
     "description": "FarSend - Private Batch Sender",
     "primaryCategory": "utility"
   },
+  "baseBuilder": {
+    "allowedAddresses": ["0xA5f2c343813B6fb6fE947C2C4759F2c421a346a7"]
+  },
   "accountAssociation": {
     "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDE4MjhjNEJmNzhEQWI2NkI0QjdkZUJmYUEzOEYwQWQxMjVFYzhkMTUifQ",
     "payload": "eyJkb21haW4iOiJmYXJzZW5kLnZlcmNlbC5hcHAifQ",
