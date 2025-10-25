@@ -10,10 +10,6 @@
     {
       "source": "/",
       "destination": "/splash.html"
-    },
-    {
-      "source": "/index.html",
-      "destination": "/index.html"
     }
   ]
 }
