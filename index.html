@@ -489,13 +489,27 @@
                 }
 
                 async function handleConnect() {
+                    const wasConnected = state.isWalletConnected;
+                    const previousAddress = state.walletAddress;
+                    
                     connectWalletBtn.disabled = true;
                     connectWalletBtn.innerHTML = `<span class="animate-pulse text-purple-700 font-bold">Connecting...</span>`;
                     
                     try {
                         await window.appKit.open({ view: 'Connect', namespace: 'eip155' });
                         
-                        if (!state.isWalletConnected) {
+                        // Wait a bit for state to update via subscribeProviders
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
+                        // If wallet is connected, restore the connected state UI
+                        if (state.isWalletConnected && state.walletAddress) {
+                            const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                            connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                            connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+                            connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                            connectWalletBtn.disabled = false;
+                        } else if (!state.isWalletConnected) {
+                            // Modal was closed or connection failed
                             connectWalletBtn.innerHTML = `
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                                 <span>Connect Wallet</span>`;
@@ -504,13 +518,21 @@
                     } catch (error) {
                         console.error('Connection error:', error);
                         showNotification(`Wallet connection failed: ${error.message.substring(0, 100)}`, 'error');
-                        connectWalletBtn.innerHTML = `
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                            <span>Connect Wallet</span>`;
+                        
+                        // Restore previous state if there was one
+                        if (wasConnected && previousAddress) {
+                            const truncatedAddress = `${previousAddress.slice(0, 6)}...${previousAddress.slice(-4)}`;
+                            connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                            connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+                            connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                        } else {
+                            connectWalletBtn.innerHTML = `
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                                <span>Connect Wallet</span>`;
+                        }
                         connectWalletBtn.disabled = false;
                     }
                 }
-                
                 function handleDisconnect() {
                     if (state.isWalletConnected) {
                         window.appKit.disconnect();
