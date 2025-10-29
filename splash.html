@@ -277,6 +277,11 @@
         @keyframes fadeOut {
             to { opacity: 0; transform: scale(0.95); }
         }
+
+        /* Hidden state for transitioning */
+        body.transitioning {
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -329,37 +334,49 @@
 
     <!-- Farcaster SDK -->
     <script type="module">
-        import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
-
-        document.addEventListener('DOMContentLoaded', async () => {
+        // Function to redirect to index.html
+        function redirectToApp() {
             const container = document.getElementById('splashContainer');
+            document.body.classList.add('transitioning');
+            
+            container.classList.add('fade-out');
+            
+            setTimeout(() => {
+                window.location.href = '/index.html';
+            }, 500); // Match fade-out duration
+        }
 
-            if (window.frame && window.frame.sdk) {
-                try {
-                    // Simulate app initialization (replace with actual logic)
-                    await new Promise(resolve => setTimeout(resolve, 2000)); // 2-second delay for demo
+        // Check if running in Farcaster Mini App context
+        const isFarcasterContext = typeof window !== 'undefined' && 
+                                   (window.parent !== window || 
+                                    navigator.userAgent.includes('Farcaster'));
 
-                    // Hide splash when ready
-                    container.classList.add('fade-out');
-
-                    // Notify Farcaster that the app is ready after fade-out
+        if (isFarcasterContext) {
+            // Try to import and initialize Farcaster SDK
+            import('https://esm.sh/@farcaster/miniapp-sdk')
+                .then(({ sdk }) => {
+                    // Simulate app initialization
                     setTimeout(async () => {
-                        await sdk.actions.ready({ disableNativeGestures: true });
-                        console.log('Farcaster Frame SDK ready at 05:25 PM IST on October 25, 2025.');
-                    }, 500); // Match fade-out duration
-                } catch (error) {
-                    console.error('Error initializing Farcaster SDK:', error);
-                }
-            } else {
-                // Fallback for standalone mode
-                setTimeout(() => {
-                    container.classList.add('fade-out');
-                    setTimeout(() => {
-                        window.location.href = 'index.html'; // Redirect to main app
-                    }, 500); // Match fade-out duration
-                }, 2000); // 2-second delay for splash screen
-            }
-        });
+                        try {
+                            await sdk.actions.ready({ disableNativeGestures: true });
+                            console.log('Farcaster SDK initialized successfully');
+                            redirectToApp();
+                        } catch (error) {
+                            console.error('Error initializing Farcaster SDK:', error);
+                            // Fallback to redirect even if SDK fails
+                            redirectToApp();
+                        }
+                    }, 2000);
+                })
+                .catch((error) => {
+                    console.error('Failed to load Farcaster SDK:', error);
+                    // Fallback to standard redirect if SDK import fails
+                    setTimeout(redirectToApp, 2000);
+                });
+        } else {
+            // Standard browser mode - just redirect after splash
+            setTimeout(redirectToApp, 2000);
+        }
     </script>
 </body>
 </html>
