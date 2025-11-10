@@ -428,6 +428,7 @@
                         requiredAllowance: 0n,
                     },
                     currentStep: 1,
+                    accountsChangedListenerAdded: false,
                 };
 
                 // --- HELPER FUNCTIONS ---
@@ -554,6 +555,7 @@
                         connectWalletBtn.disabled = false;
                     }
                 }
+
                 function handleDisconnect() {
                     if (state.isWalletConnected) {
                         window.appKit.disconnect();
@@ -563,6 +565,7 @@
                     state.walletAddress = null;
                     state.signer = null;
                     state.batchContract = null;
+                    state.accountsChangedListenerAdded = false;
                     
                     state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
                     erc20Address.value = '';
@@ -676,7 +679,14 @@
                         showNotification(`Requesting approval for ${amountToDisplay} ${state.tokenInfo.symbol}...`, 'info');
                         
                         const contractWithSigner = state.tokenInfo.contract.connect(state.signer);
-                        const tx = await contractWithSigner.approve(CONTRACT_ADDRESS, amountToApprove);
+                        
+                        // CRITICAL FIX: Add explicit gas limit for Farcaster Wallet
+                        const gasEstimate = await contractWithSigner.approve.estimateGas(CONTRACT_ADDRESS, amountToApprove);
+                        const gasLimit = gasEstimate + (gasEstimate * 20n / 100n); // Add 20% buffer
+                        
+                        const tx = await contractWithSigner.approve(CONTRACT_ADDRESS, amountToApprove, {
+                            gasLimit: gasLimit
+                        });
                         
                         showNotification(`Approval transaction sent. Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
                         
@@ -764,12 +774,77 @@
                         let tx;
                         const recipientAddresses = recipients.map(r => r.address);
 
+                        // CRITICAL FIX: Add explicit gas estimation and limits for Farcaster Wallet
                         if (token === 'ETH') {
                             const totalValue = totalAmountBN;
-                            tx = await batchContract.disperseEther(recipientAddresses, amounts, { value: totalValue });
+                            
+                            try {
+                                // Estimate gas first
+                                const gasEstimate = await batchContract.disperseEther.estimateGas(
+                                    recipientAddresses, 
+                                    amounts, 
+                                    { value: totalValue }
+                                );
+                                
+                                // Add 30% buffer for Farcaster Wallet
+                                const gasLimit = gasEstimate + (gasEstimate * 30n / 100n);
+                                
+                                tx = await batchContract.disperseEther(
+                                    recipientAddresses, 
+                                    amounts, 
+                                    { 
+                                        value: totalValue,
+                                        gasLimit: gasLimit
+                                    }
+                                );
+                            } catch (estimateError) {
+                                console.error('Gas estimation failed:', estimateError);
+                                // Fallback with manual gas limit
+                                const fallbackGasLimit = 200000n + (BigInt(recipients.length) * 50000n);
+                                tx = await batchContract.disperseEther(
+                                    recipientAddresses, 
+                                    amounts, 
+                                    { 
+                                        value: totalValue,
+                                        gasLimit: fallbackGasLimit
+                                    }
+                                );
+                            }
                         } else {
                             const batchContractWithSigner = batchContract.connect(signer);
-                            tx = await batchContractWithSigner.disperseToken(tokenInfo.address, recipientAddresses, amounts);
+                            
+                            try {
+                                // Estimate gas first
+                                const gasEstimate = await batchContractWithSigner.disperseToken.estimateGas(
+                                    tokenInfo.address, 
+                                    recipientAddresses, 
+                                    amounts
+                                );
+                                
+                                // Add 30% buffer for Farcaster Wallet
+                                const gasLimit = gasEstimate + (gasEstimate * 30n / 100n);
+                                
+                                tx = await batchContractWithSigner.disperseToken(
+                                    tokenInfo.address, 
+                                    recipientAddresses, 
+                                    amounts,
+                                    {
+                                        gasLimit: gasLimit
+                                    }
+                                );
+                            } catch (estimateError) {
+                                console.error('Gas estimation failed:', estimateError);
+                                // Fallback with manual gas limit
+                                const fallbackGasLimit = 200000n + (BigInt(recipients.length) * 70000n);
+                                tx = await batchContractWithSigner.disperseToken(
+                                    tokenInfo.address, 
+                                    recipientAddresses, 
+                                    amounts,
+                                    {
+                                        gasLimit: fallbackGasLimit
+                                    }
+                                );
+                            }
                         }
                         
                         showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${BASE_EXPLORER_URL}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
@@ -1120,7 +1195,7 @@
                         }
 
                         const isNewConnection = !state.isWalletConnected;
-                        const isAccountChange = state.isWalletConnected && address.toLowerCase() !== state.walletAddress.toLowerCase();
+                        const isAccountChange = state.isWalletConnected && address.toLowerCase() !== state.walletAddress?.toLowerCase();
                         
                         if (isNewConnection || isAccountChange) {
                             if (isAccountChange) {
@@ -1157,45 +1232,48 @@
                                 await validateERC20Address(erc20Address.value);
                             }
                             await updateSummary();
+                            
+                            // CRITICAL FIX: Only add accountsChanged listener once
+                            if (!state.accountsChangedListenerAdded) {
+                                state.accountsChangedListenerAdded = true;
+                                
+                                eip1193Provider.on('accountsChanged', async (accounts) => {
+                                    if (accounts.length === 0) {
+                                        showNotification('Wallet disconnected or no accounts available.', 'info');
+                                        handleDisconnect();
+                                        return;
+                                    }
+
+                                    const newAddress = ethers.getAddress(accounts[0]);
+                                    if (state.isWalletConnected && state.walletAddress && newAddress.toLowerCase() !== state.walletAddress.toLowerCase()) {
+                                        showNotification('Wallet account changed.', 'info');
+
+                                        // Update state with new account
+                                        state.walletAddress = newAddress;
+                                        const ethersProvider = new ethers.BrowserProvider(eip1193Provider);
+                                        state.signer = await ethersProvider.getSigner();
+                                        state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
+
+                                        // Update UI
+                                        const truncatedAddress = `${newAddress.slice(0, 6)}...${newAddress.slice(-4)}`;
+                                        connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                                        connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700', 'bg-red-500', 'hover:bg-red-600');
+                                        connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                                        connectWalletBtn.disabled = false;
+
+                                        appContent.classList.remove('hidden');
+                                        farcasterConnectBtn.disabled = false;
+                                        updateStepIndicator(2);
+
+                                        // Re-validate ERC-20 token if applicable
+                                        if (state.token === 'ERC20' && ethers.isAddress(erc20Address.value)) {
+                                            await validateERC20Address(erc20Address.value);
+                                        }
+                                        await updateSummary();
+                                    }
+                                });
+                            }
                         }
-
-                        // --- NEW: Add accountsChanged listener ---
-                        eip1193Provider.on('accountsChanged', async (accounts) => {
-                            if (accounts.length === 0) {
-                                showNotification('Wallet disconnected or no accounts available.', 'info');
-                                handleDisconnect();
-                                return;
-                            }
-
-                            const newAddress = ethers.getAddress(accounts[0]);
-                            // Null check for state.walletAddress to prevent comparison errors
-                            if (state.isWalletConnected && state.walletAddress && newAddress.toLowerCase() !== state.walletAddress.toLowerCase()) {
-                                showNotification('Wallet account changed.', 'info');
-
-                                // Update state with new account
-                                state.walletAddress = newAddress;
-                                const ethersProvider = new ethers.BrowserProvider(eip1193Provider);
-                                state.signer = await ethersProvider.getSigner();
-                                state.batchContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, state.signer);
-
-                                // Update UI
-                                const truncatedAddress = `${newAddress.slice(0, 6)}...${newAddress.slice(-4)}`;
-                                connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                                connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700', 'bg-red-500', 'hover:bg-red-600');
-                                connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
-                                connectWalletBtn.disabled = false;
-
-                                appContent.classList.remove('hidden');
-                                farcasterConnectBtn.disabled = false;
-                                updateStepIndicator(2);
-
-                                // Re-validate ERC-20 token if applicable
-                                if (state.token === 'ERC20' && ethers.isAddress(erc20Address.value)) {
-                                    await validateERC20Address(erc20Address.value);
-                                }
-                                await updateSummary();
-                            }
-                        });
 
                     } catch (error) {
                         console.error('Subscriber error:', error);
