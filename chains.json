@@ -1,0 +1,107 @@
+{
+  "chains": {
+    "8453": {
+      "name": "Base",
+      "shortName": "base",
+      "chainId": 8453,
+      "chainIdHex": "0x2141",
+      "rpcUrl": "https://mainnet.base.org",
+      "explorerUrl": "https://basescan.org",
+      "nativeCurrency": {
+        "name": "Ethereum",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "contractAddress": "0x8878b70a01bdda92ab8ea48dd7893b64c69298c0",
+      "icon": "https://www.base.org/videos/motion/Wordmark_TEST_07_large.mp4"
+    },
+    "1": {
+      "name": "Ethereum",
+      "shortName": "eth",
+      "chainId": 1,
+      "chainIdHex": "0x1",
+      "rpcUrl": "https://eth.llamarpc.com",
+      "explorerUrl": "https://etherscan.io",
+      "nativeCurrency": {
+        "name": "Ethereum",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "contractAddress": "0xYOUR_ETH_CONTRACT_ADDRESS",
+      "icon": "⟠"
+    },
+    "10": {
+      "name": "Optimism",
+      "shortName": "op",
+      "chainId": 10,
+      "chainIdHex": "0xa",
+      "rpcUrl": "https://mainnet.optimism.io",
+      "explorerUrl": "https://optimistic.etherscan.io",
+      "nativeCurrency": {
+        "name": "Ethereum",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "contractAddress": "0xYOUR_OP_CONTRACT_ADDRESS",
+      "icon": "🔴"
+    },
+    "42161": {
+      "name": "Arbitrum",
+      "shortName": "arb",
+      "chainId": 42161,
+      "chainIdHex": "0xa4b1",
+      "rpcUrl": "https://arb1.arbitrum.io/rpc",
+      "explorerUrl": "https://arbiscan.io",
+      "nativeCurrency": {
+        "name": "Ethereum",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "contractAddress": "0xYOUR_ARB_CONTRACT_ADDRESS",
+      "icon": "🔷"
+    }
+  },
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address[]",
+          "name": "recipients",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "amounts",
+          "type": "uint256[]"
+        }
+      ],
+      "name": "disperseEther",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "contract IERC20",
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "internalType": "address[]",
+          "name": "recipients",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "amounts",
+          "type": "uint256[]"
+        }
+      ],
+      "name": "disperseToken",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ]
+}
