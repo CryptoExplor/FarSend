@@ -198,14 +198,6 @@
                         <span>Connect Wallet</span>
                     </button>
                 </div>
-                <!-- Farcaster POC Button -->
-                <div class="flex justify-between items-center pt-2 border-t border-gray-100">
-                    <h2 class="text-lg font-semibold text-gray-800">Farcaster ID (Optional)</h2>
-                    <button id="farcasterConnectBtn" class="w-48 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18.784 11.232c-.524-.717-1.12-1.385-1.782-2.003L12 3.12 7.004 9.172c-.662.618-1.258 1.286-1.782 2.003-.574.786-.872 1.696-.872 2.656 0 1.986.812 3.844 2.22 5.188 1.408 1.344 3.328 2.084 5.346 2.084 2.018 0 3.938-.74 5.346-2.084 1.408-1.344 2.22-3.202 2.22-5.188 0-.96-.298-1.87-.872-2.656zm-6.784 8.768c-1.334 0-2.586-.534-3.52-1.48s-1.48-2.186-1.48-3.52c0-.68.12-1.34.354-1.966.234-.626.586-1.206 1.054-1.724L12 6.072l6.596 6.54c.468.518.82 1.098 1.054 1.724.234.626.354 1.286.354 1.966 0 1.334-.534 2.586-1.48 3.52s-2.186 1.48-3.52 1.48z" fill="white"/></svg>
-                        <span id="farcasterBtnText">Link Farcaster ID</span>
-                    </button>
-                </div>
             </div>
             
             <div id="app-content" class="hidden space-y-6">
@@ -307,8 +299,6 @@
                         <span id="dispatchBtnText">Dispatch Batch</span>
                         <div id="loadingSpinner" class="hidden animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                     </button>
-                    <p class="text-xs text-center text-gray-500 mt-2">Transactions are processed on-chain (publicly transparent).</p>
-                    <p class="text-xs text-center text-gray-500 mt-2">Privacy: Standard transparency (public on-chain). FHE privacy layer coming Q1 2026 when Zama Protocol expands to Base. Try Zama FHE Sepolia testnet <a href="https://farsend.vercel.app/sepolia" target="_blank" class="underline" style="color: #6A3CFF;">here</a>.</p>
                 </div>
             </div>
         </main>
@@ -388,7 +378,6 @@
                 
                 // --- DOM Elements ---
                 const connectWalletBtn = document.getElementById('connectWalletBtn');
-                const farcasterConnectBtn = document.getElementById('farcasterConnectBtn');
                 const appContent = document.getElementById('app-content');
                 const tokenSelect = document.getElementById('tokenSelect');
                 const erc20InputContainer = document.getElementById('erc20InputContainer');
@@ -579,7 +568,6 @@
                     connectWalletBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
                     connectWalletBtn.disabled = false;
                     
-                    farcasterConnectBtn.disabled = true;
                     appContent.classList.add('hidden');
                     updateStepIndicator(1);
                 }
@@ -1089,14 +1077,6 @@
                 approveBtn.addEventListener('click', handleApprove);
                 dispatchBtn.addEventListener('click', handleDispatch);
 
-                farcasterConnectBtn.addEventListener('click', () => {
-                    showNotification('Farcaster Sign-in POC: In a production app, this would initiate a SIWF (Sign-In with Farcaster) flow via your wallet. Identity linked!', 'info');
-                    document.getElementById('farcasterBtnText').textContent = 'Farcaster ID Linked!';
-                    farcasterConnectBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-                    farcasterConnectBtn.classList.add('bg-green-500', 'hover:bg-green-600');
-                    farcasterConnectBtn.disabled = true;
-                });
-
                 tokenSelect.addEventListener('change', () => {
                     tokenSelect.classList.add('animate-bounce');
                     setTimeout(() => tokenSelect.classList.remove('animate-bounce'), 400);
@@ -1221,7 +1201,6 @@
                             connectWalletBtn.disabled = false;
                             
                             appContent.classList.remove('hidden');
-                            farcasterConnectBtn.disabled = false;
                             updateStepIndicator(2);
                             
                             if (isNewConnection) {
@@ -1262,7 +1241,6 @@
                                         connectWalletBtn.disabled = false;
 
                                         appContent.classList.remove('hidden');
-                                        farcasterConnectBtn.disabled = false;
                                         updateStepIndicator(2);
 
                                         // Re-validate ERC-20 token if applicable
