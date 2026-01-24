@@ -632,6 +632,16 @@
                     updateStepIndicator(1);
                 }
 
+                function handleConnectClick() {
+                    if (state.isWalletConnected) {
+                        // If already connected, disconnect the wallet
+                        handleDisconnect();
+                    } else {
+                        // If not connected, initiate connection
+                        handleConnect();
+                    }
+                }
+
                 async function validateERC20Address(address) {
                     if (!state.provider) {
                         showNotification('Please connect your wallet first.', 'error');
@@ -1259,7 +1269,7 @@
                     }, 300); // Debounce
                 });
 
-                connectWalletBtn.addEventListener('click', handleConnect);
+                connectWalletBtn.addEventListener('click', handleConnectClick);
                 approveBtn.addEventListener('click', handleApprove);
                 dispatchBtn.addEventListener('click', handleDispatch);
 
