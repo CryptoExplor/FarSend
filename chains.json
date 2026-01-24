@@ -12,8 +12,7 @@
         "symbol": "ETH",
         "decimals": 18
       },
-      "contractAddress": "0x8878b70a01bdda92ab8ea48dd7893b64c69298c0",
-      "icon": "https://www.base.org/videos/motion/Wordmark_TEST_07_large.mp4"
+      "contractAddress": "0x8878b70a01bdda92ab8ea48dd7893b64c69298c0"
     },
     "1": {
       "name": "Ethereum",
@@ -27,8 +26,7 @@
         "symbol": "ETH",
         "decimals": 18
       },
-      "contractAddress": "0xYOUR_ETH_CONTRACT_ADDRESS",
-      "icon": "⟠"
+      "contractAddress": "0xF2168287245b647DEacA4562e4b80AC78868Ade5"
     },
     "10": {
       "name": "Optimism",
@@ -42,8 +40,7 @@
         "symbol": "ETH",
         "decimals": 18
       },
-      "contractAddress": "0xYOUR_OP_CONTRACT_ADDRESS",
-      "icon": "🔴"
+      "contractAddress": "0x8e33e8149756D5aA9E81763EAF82bA5702B6Ab50"
     },
     "42161": {
       "name": "Arbitrum",
@@ -57,8 +54,7 @@
         "symbol": "ETH",
         "decimals": 18
       },
-      "contractAddress": "0xYOUR_ARB_CONTRACT_ADDRESS",
-      "icon": "🔷"
+      "contractAddress": "0xa3781e8cd25b5E7741E2903b24e5B7157938594d"
     }
   },
   "abi": [
