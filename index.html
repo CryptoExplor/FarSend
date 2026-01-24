@@ -1569,14 +1569,16 @@
                 (async () => {
                     try {
                         // Wait a bit for AppKit to initialize
-                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        await new Promise(resolve => setTimeout(resolve, 1500));
                         
-                        const currentState = window.appKit.getState();
-                        const isConnected = currentState?.connected;
+                        const initialState = window.appKit.getState();
+                        const eip1193Provider = initialState?.providerType === 'injected' || initialState?.providerType === 'walletConnect' 
+                            ? await window.appKit.getWalletProvider() 
+                            : null;
                         
-                        if (isConnected) {
+                        if (eip1193Provider) {
                             console.log('Found existing connection on page load');
-                            // Trigger the provider subscriber manually to restore state
+                            // Trigger the provider subscriber manually
                             window.appKit.subscribeProviders(() => {});
                         }
                     } catch (error) {
