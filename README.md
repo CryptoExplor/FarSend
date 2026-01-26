@@ -1,6 +1,6 @@
 # FarSend
 
-**Batch send ETH and ERC-20 tokens to multiple addresses on Base — built for Farcaster.**
+**Multi-chain batch sender for ETH and ERC-20 tokens — built for Farcaster.**
 
 🚀 **Live App**: [https://farsend.vercel.app/](https://farsend.vercel.app/)
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-FarSend is a web-based batch sender that enables users to send ETH and ERC-20 tokens to multiple addresses in a single transaction on Base L2. Built as a Farcaster Mini App, FarSend streamlines token distributions for airdrops, community rewards, DAO payouts, and bulk transfers.
+FarSend is a web-based batch sender that enables users to send ETH and ERC-20 tokens to multiple addresses in a single transaction across multiple Ethereum networks. Built as a Farcaster Mini App, FarSend streamlines token distributions for airdrops, community rewards, DAO payouts, and bulk transfers on Ethereum Mainnet, Base, Optimism, and Arbitrum.
 
 ---
 
