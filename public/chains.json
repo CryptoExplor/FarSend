@@ -55,6 +55,48 @@
         "decimals": 18
       },
       "contractAddress": "0xa3781e8cd25b5E7741E2903b24e5B7157938594d"
+    },
+    "56": {
+      "name": "BNB Smart Chain",
+      "shortName": "bsc",
+      "chainId": 56,
+      "chainIdHex": "0x38",
+      "rpcUrl": "https://rpc.ankr.com/bsc",
+      "explorerUrl": "https://bscscan.com",
+      "nativeCurrency": {
+        "name": "BNB",
+        "symbol": "BNB",
+        "decimals": 18
+      },
+      "contractAddress": "0x0a9a78d663593Fd521C0DC69d5206d35B6287143"
+    },
+    "43114": {
+      "name": "Avalanche C-Chain",
+      "shortName": "avax",
+      "chainId": 43114,
+      "chainIdHex": "0xa882",
+      "rpcUrl": "https://api.avax.network/ext/bc/C/rpc",
+      "explorerUrl": "https://snowtrace.io",
+      "nativeCurrency": {
+        "name": "Avalanche",
+        "symbol": "AVAX",
+        "decimals": 18
+      },
+      "contractAddress": "0x099B63ed3B51149ca8e2e77Eb4Cd6186AC4dd782"
+    },
+    "137": {
+      "name": "Polygon PoS",
+      "shortName": "polygon",
+      "chainId": 137,
+      "chainIdHex": "0x89",
+      "rpcUrl": "https://polygon-rpc.com",
+      "explorerUrl": "https://polygonscan.com",
+      "nativeCurrency": {
+        "name": "MATIC",
+        "symbol": "MATIC",
+        "decimals": 18
+      },
+      "contractAddress": "0x9EEf8a9117272c1b5c4A4181f888000637317ea8"
     }
   },
   "abi": [
