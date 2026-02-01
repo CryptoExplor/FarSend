@@ -1,16 +1,11 @@
 import { defineConfig } from 'vite';
-import legacy from '@vitejs/plugin-legacy';
 
 export default defineConfig({
-  plugins: [
-    legacy({
-      targets: ['defaults', 'not IE 11']
-    })
-  ],
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
+    target: 'es2020', // Support BigInt and modern features
     rollupOptions: {
       input: {
         main: 'index.html',
@@ -30,10 +25,7 @@ export default defineConfig({
     open: true
   },
   publicDir: 'public',
-  resolve: {
-    alias: {
-      // Fix for some ESM issues
-      'node-fetch': 'node-fetch'
-    }
+  esbuild: {
+    target: 'es2020' // Ensure esbuild also targets ES2020
   }
 });
