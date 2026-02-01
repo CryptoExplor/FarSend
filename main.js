@@ -53,6 +53,37 @@ function initializeApp() {
     let CHAINS_CONFIG = {};
     let CONTRACT_ABI = [];
 
+    fetch('/chains.json')
+        .then(res => res.json())
+        .then(config => {
+            CHAINS_CONFIG = config.chains;
+            CONTRACT_ABI = config.abi;
+            console.log('✅ Loaded chains configuration:', Object.keys(CHAINS_CONFIG));
+
+            // Validate configuration
+            if (!CHAINS_CONFIG || Object.keys(CHAINS_CONFIG).length === 0) {
+                throw new Error('Empty chain configuration');
+            }
+
+            Object.entries(CHAINS_CONFIG).forEach(([chainId, chain]) => {
+                if (!chain.name || !chain.contractAddress || !chain.rpcUrl) {
+                    throw new Error(`Invalid chain configuration for chain ${chainId}: missing required properties`);
+                }
+                if (!ethers.isAddress(chain.contractAddress)) {
+                    throw new Error(`Invalid contract address for chain ${chainId}: ${chain.contractAddress}`);
+                }
+            });
+
+            console.log('Chain configuration validated successfully');
+            populateChainSelector();
+            updateChainDisplay(8453); // Set Base as default UI
+            setupEventListeners();
+        })
+        .catch(e => {
+            console.error('❌ Failed loading chains.json:', e);
+            showNotification('Failed to load chain configuration. Please refresh the page.', 'error');
+        });
+
     const ERC20_ABI = [
         "function name() view returns (string)",
         "function symbol() view returns (string)",
@@ -66,7 +97,6 @@ function initializeApp() {
     const connectWalletBtn = document.getElementById('connectWalletBtn');
     const appContent = document.getElementById('app-content');
     const chainSelector = document.getElementById('chainSelector');
-    chainSelector.disabled = true; // Disabled until wallet connects
     const tokenSelect = document.getElementById('tokenSelect');
     const erc20InputContainer = document.getElementById('erc20InputContainer');
     const erc20Address = document.getElementById('erc20Address');
@@ -822,492 +852,462 @@ function initializeApp() {
         showNotification('Recipients exported as CSV.', 'success');
     });
 
-    function setupEventListeners() {
-        // --- EVENT LISTENERS ---
+    // --- EVENT LISTENERS ---
 
-        // Debounced chain switch to prevent race conditions
-        let chainSwitchTimeout;
-        chainSelector.addEventListener('change', async (e) => {
-            const selectedChainId = parseInt(e.target.value);
-            console.log('Chain selector changed to:', selectedChainId, 'Current wallet connected:', state.isWalletConnected);
-            if (!selectedChainId || !state.isWalletConnected || !state.eip1193Provider) return;
+    // Populate and handle chain selector
+    populateChainSelector();
+    chainSelector.disabled = true; // Disabled until wallet connects
 
-            // Clear any pending switch
-            if (chainSwitchTimeout) clearTimeout(chainSwitchTimeout);
+    // Debounced chain switch to prevent race conditions
+    let chainSwitchTimeout;
+    chainSelector.addEventListener('change', async (e) => {
+        const selectedChainId = parseInt(e.target.value);
+        console.log('Chain selector changed to:', selectedChainId, 'Current wallet connected:', state.isWalletConnected);
+        if (!selectedChainId || !state.isWalletConnected || !state.eip1193Provider) return;
 
-            // Prevent duplicate updates
-            if (state.currentChain?.chainId === selectedChainId) {
-                console.log('Already on this chain');
-                return;
-            }
+        // Clear any pending switch
+        if (chainSwitchTimeout) clearTimeout(chainSwitchTimeout);
 
-            if (!CHAINS_CONFIG[selectedChainId]) {
-                showNotification('Selected chain is not supported', 'error');
-                chainSelector.value = state.currentChain ? state.currentChain.chainId.toString() : '';
-                return;
-            }
+        // Prevent duplicate updates
+        if (state.currentChain?.chainId === selectedChainId) {
+            console.log('Already on this chain');
+            return;
+        }
 
-            chainSwitchTimeout = setTimeout(async () => {
+        if (!CHAINS_CONFIG[selectedChainId]) {
+            showNotification('Selected chain is not supported', 'error');
+            chainSelector.value = state.currentChain ? state.currentChain.chainId.toString() : '';
+            return;
+        }
+
+        chainSwitchTimeout = setTimeout(async () => {
+            try {
+                const chainData = CHAINS_CONFIG[selectedChainId];
+
+                // Prepare chain data for wallet_addEthereumChain
+                const addChainParams = {
+                    chainId: `0x${selectedChainId.toString(16)}`, // Convert to hex
+                    chainName: chainData.name,
+                    nativeCurrency: {
+                        name: chainData.nativeCurrency?.name || 'Ethereum',
+                        symbol: chainData.nativeCurrency?.symbol || 'ETH',
+                        decimals: chainData.nativeCurrency?.decimals || 18
+                    },
+                    rpcUrls: [chainData.rpcUrl],
+                    blockExplorerUrls: [chainData.explorerUrl]
+                };
+
+                // Try to switch using wallet_switchEthereumChain first
                 try {
-                    const chainData = CHAINS_CONFIG[selectedChainId];
+                    console.log('Attempting to switch to chainId:', selectedChainId);
+                    await state.eip1193Provider.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: `0x${selectedChainId.toString(16)}` }]
+                    });
 
-                    // Prepare chain data for wallet_addEthereumChain
-                    const addChainParams = {
-                        chainId: `0x${selectedChainId.toString(16)}`, // Convert to hex
-                        chainName: chainData.name,
-                        nativeCurrency: {
-                            name: chainData.nativeCurrency?.name || 'Ethereum',
-                            symbol: chainData.nativeCurrency?.symbol || 'ETH',
-                            decimals: chainData.nativeCurrency?.decimals || 18
-                        },
-                        rpcUrls: [chainData.rpcUrl],
-                        blockExplorerUrls: [chainData.explorerUrl]
-                    };
+                    // Wait briefly for the switch to process
+                    await new Promise(resolve => setTimeout(resolve, 500));
 
-                    // Try to switch using wallet_switchEthereumChain first
-                    try {
-                        console.log('Attempting to switch to chainId:', selectedChainId);
-                        await state.eip1193Provider.request({
-                            method: 'wallet_switchEthereumChain',
-                            params: [{ chainId: `0x${selectedChainId.toString(16)}` }]
-                        });
+                    // Verify the switch worked
+                    const network = await state.provider.getNetwork();
+                    if (Number(network.chainId) === selectedChainId) {
+                        showNotification(`Successfully switched to ${chainData.name}`, 'success');
+                        return;
+                    }
+                } catch (switchError) {
+                    // If chain is not added to wallet, try adding it
+                    if (switchError.code === 4902) { // Unrecognized chain ID
+                        console.log('Chain not found in wallet, attempting to add it...');
+                        try {
+                            await state.eip1193Provider.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [addChainParams]
+                            });
 
-                        // Wait briefly for the switch to process
-                        await new Promise(resolve => setTimeout(resolve, 500));
+                            // Wait for the chain to be added
+                            await new Promise(resolve => setTimeout(resolve, 1000));
 
-                        // Verify the switch worked
-                        const network = await state.provider.getNetwork();
-                        if (Number(network.chainId) === selectedChainId) {
-                            showNotification(`Successfully switched to ${chainData.name}`, 'success');
-                            return;
-                        }
-                    } catch (switchError) {
-                        // If chain is not added to wallet, try adding it
-                        if (switchError.code === 4902) { // Unrecognized chain ID
-                            console.log('Chain not found in wallet, attempting to add it...');
-                            try {
-                                await state.eip1193Provider.request({
-                                    method: 'wallet_addEthereumChain',
-                                    params: [addChainParams]
-                                });
+                            // Now try to switch again
+                            await state.eip1193Provider.request({
+                                method: 'wallet_switchEthereumChain',
+                                params: [{ chainId: `0x${selectedChainId.toString(16)}` }]
+                            });
 
-                                // Wait for the chain to be added
-                                await new Promise(resolve => setTimeout(resolve, 1000));
+                            // Wait briefly for the switch to process
+                            await new Promise(resolve => setTimeout(resolve, 500));
 
-                                // Now try to switch again
-                                await state.eip1193Provider.request({
-                                    method: 'wallet_switchEthereumChain',
-                                    params: [{ chainId: `0x${selectedChainId.toString(16)}` }]
-                                });
-
-                                // Wait briefly for the switch to process
-                                await new Promise(resolve => setTimeout(resolve, 500));
-
-                                // Verify the switch worked
-                                const network = await state.provider.getNetwork();
-                                if (Number(network.chainId) === selectedChainId) {
-                                    showNotification(`Successfully added and switched to ${chainData.name}`, 'success');
-                                    return;
-                                }
-                            } catch (addError) {
-                                console.error('Failed to add chain:', addError);
-                                throw addError;
+                            // Verify the switch worked
+                            const network = await state.provider.getNetwork();
+                            if (Number(network.chainId) === selectedChainId) {
+                                showNotification(`Successfully added and switched to ${chainData.name}`, 'success');
+                                return;
                             }
-                        } else {
-                            throw switchError;
+                        } catch (addError) {
+                            console.error('Failed to add chain:', addError);
+                            throw addError;
                         }
+                    } else {
+                        throw switchError;
+                    }
+                }
+            } catch (error) {
+                console.error('Network switch failed:', error);
+
+                let errorMessage = 'Failed to switch network.';
+                if (error.code === 4001) {
+                    errorMessage = 'Network switch rejected by user.';
+                } else if (error.code === 4902) {
+                    errorMessage = 'Chain not available in wallet and failed to add.';
+                } else if (error.message) {
+                    errorMessage = error.message;
+                }
+
+                showNotification(errorMessage, 'error');
+
+                // Reset dropdown to current chain
+                if (state.currentChain) {
+                    chainSelector.value = state.currentChain.chainId.toString();
+                }
+            }
+        }, 300); // Debounce
+    });
+
+    connectWalletBtn.addEventListener('click', handleConnectClick);
+    approveBtn.addEventListener('click', handleApprove);
+    dispatchBtn.addEventListener('click', handleDispatch);
+
+    tokenSelect.addEventListener('change', () => {
+        tokenSelect.classList.add('animate-bounce');
+        setTimeout(() => tokenSelect.classList.remove('animate-bounce'), 400);
+        state.token = tokenSelect.value;
+        if (state.token === 'ERC20') {
+            erc20InputContainer.classList.remove('hidden');
+            tokenSymbolDisplay.textContent = 'Enter Address';
+            tokenInfoRow.classList.add('hidden');
+            approvalSection.classList.add('hidden');
+            state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
+        } else {
+            erc20InputContainer.classList.add('hidden');
+            erc20Address.value = '';
+            tokenSymbolDisplay.textContent = '';
+            tokenInfoRow.classList.add('hidden');
+            approvalSection.classList.add('hidden');
+            const symbol = state.currentChain?.nativeCurrency?.symbol || 'ETH';
+            const decimals = state.currentChain?.nativeCurrency?.decimals || 18;
+            state.tokenInfo = { address: '', symbol: symbol, decimals: decimals, contract: null, allowance: 0n, requiredAllowance: 0n };
+
+            // Update the dropdown option text
+            const nativeOption = Array.from(tokenSelect.options).find(opt => opt.value === 'ETH');
+            if (nativeOption) {
+                nativeOption.textContent = symbol;
+            }
+        }
+        parseAndValidateData(recipientsTextarea.value, 'text');
+    });
+
+    erc20Address.addEventListener('input', async (e) => {
+        const address = e.target.value.trim();
+        if (ethers.isAddress(address)) {
+            await validateERC20Address(address);
+        } else {
+            tokenSymbolDisplay.textContent = 'Invalid';
+            tokenInfoRow.classList.add('hidden');
+            approvalSection.classList.add('hidden');
+            state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
+        }
+        await updateSummary();
+    });
+
+    recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
+
+    csvUpload.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            recipientsTextarea.value = e.target.result;
+            let fileType = 'text';
+            if (file.name.endsWith('.csv')) { fileType = 'text'; }
+            else if (file.name.endsWith('.json')) { fileType = 'json'; }
+            parseAndValidateData(e.target.result, fileType);
+        };
+        reader.readAsText(file);
+        event.target.value = null;
+    });
+
+    // Periodic chain check to catch network switches with faster detection
+    let chainCheckInterval;
+
+    function startChainCheck() {
+        if (chainCheckInterval) clearInterval(chainCheckInterval);
+        chainCheckInterval = setInterval(async () => {
+            if (state.isWalletConnected && state.provider && state.eip1193Provider) {
+                try {
+                    const network = await state.provider.getNetwork();
+                    const currentChainId = Number(network.chainId);
+
+                    // If chain changed without event firing
+                    if (state.currentChain && state.currentChain.chainId !== currentChainId) {
+                        console.log('Detected chain change via polling:', currentChainId, 'Previous was:', state.currentChain.chainId);
+
+                        // Update provider to refresh connection using stored provider reference
+                        if (state.eip1193Provider) {
+                            const ethersProvider = new ethers.BrowserProvider(state.eip1193Provider);
+                            state.provider = ethersProvider;
+                            state.signer = await ethersProvider.getSigner();
+                        }
+
+                        updateChainDisplay(currentChainId);
+                        showNotification(`Network switched to ${state.currentChain?.name || 'unknown chain'}`, 'info');
+                    } else {
+                        // Log when no change is detected for debugging
+                        console.log('Polling: no chain change detected, still on:', currentChainId);
                     }
                 } catch (error) {
-                    console.error('Network switch failed:', error);
-
-                    let errorMessage = 'Failed to switch network.';
-                    if (error.code === 4001) {
-                        errorMessage = 'Network switch rejected by user.';
-                    } else if (error.code === 4902) {
-                        errorMessage = 'Chain not available in wallet and failed to add.';
-                    } else if (error.message) {
-                        errorMessage = error.message;
-                    }
-
-                    showNotification(errorMessage, 'error');
-
-                    // Reset dropdown to current chain
-                    if (state.currentChain) {
-                        chainSelector.value = state.currentChain.chainId.toString();
-                    }
-                }
-            }, 300); // Debounce
-        });
-
-        connectWalletBtn.addEventListener('click', handleConnectClick);
-        approveBtn.addEventListener('click', handleApprove);
-        dispatchBtn.addEventListener('click', handleDispatch);
-
-        tokenSelect.addEventListener('change', () => {
-            tokenSelect.classList.add('animate-bounce');
-            setTimeout(() => tokenSelect.classList.remove('animate-bounce'), 400);
-            state.token = tokenSelect.value;
-            if (state.token === 'ERC20') {
-                erc20InputContainer.classList.remove('hidden');
-                tokenSymbolDisplay.textContent = 'Enter Address';
-                tokenInfoRow.classList.add('hidden');
-                approvalSection.classList.add('hidden');
-                state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
-            } else {
-                erc20InputContainer.classList.add('hidden');
-                erc20Address.value = '';
-                tokenSymbolDisplay.textContent = '';
-                tokenInfoRow.classList.add('hidden');
-                approvalSection.classList.add('hidden');
-                const symbol = state.currentChain?.nativeCurrency?.symbol || 'ETH';
-                const decimals = state.currentChain?.nativeCurrency?.decimals || 18;
-                state.tokenInfo = { address: '', symbol: symbol, decimals: decimals, contract: null, allowance: 0n, requiredAllowance: 0n };
-
-                // Update the dropdown option text
-                const nativeOption = Array.from(tokenSelect.options).find(opt => opt.value === 'ETH');
-                if (nativeOption) {
-                    nativeOption.textContent = symbol;
+                    console.error('Chain check failed:', error);
                 }
             }
-            parseAndValidateData(recipientsTextarea.value, 'text');
-        });
+        }, 1500); // Check every 1.5 seconds (faster detection)
+    }
 
-        erc20Address.addEventListener('input', async (e) => {
-            const address = e.target.value.trim();
-            if (ethers.isAddress(address)) {
-                await validateERC20Address(address);
-            } else {
-                tokenSymbolDisplay.textContent = 'Invalid';
-                tokenInfoRow.classList.add('hidden');
-                approvalSection.classList.add('hidden');
-                state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
-            }
-            await updateSummary();
-        });
-
-        recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
-
-        csvUpload.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                recipientsTextarea.value = e.target.result;
-                let fileType = 'text';
-                if (file.name.endsWith('.csv')) { fileType = 'text'; }
-                else if (file.name.endsWith('.json')) { fileType = 'json'; }
-                parseAndValidateData(e.target.result, fileType);
-            };
-            reader.readAsText(file);
-            event.target.value = null;
-        });
-
-        // Periodic chain check to catch network switches with faster detection
-        let chainCheckInterval;
-
-        function startChainCheck() {
-            if (chainCheckInterval) clearInterval(chainCheckInterval);
-            chainCheckInterval = setInterval(async () => {
-                if (state.isWalletConnected && state.provider && state.eip1193Provider) {
-                    try {
-                        const network = await state.provider.getNetwork();
-                        const currentChainId = Number(network.chainId);
-
-                        // If chain changed without event firing
-                        if (state.currentChain && state.currentChain.chainId !== currentChainId) {
-                            console.log('Detected chain change via polling:', currentChainId, 'Previous was:', state.currentChain.chainId);
-
-                            // Update provider to refresh connection using stored provider reference
-                            if (state.eip1193Provider) {
-                                const ethersProvider = new ethers.BrowserProvider(state.eip1193Provider);
-                                state.provider = ethersProvider;
-                                state.signer = await ethersProvider.getSigner();
-                            }
-
-                            updateChainDisplay(currentChainId);
-                            showNotification(`Network switched to ${state.currentChain?.name || 'unknown chain'}`, 'info');
-                        } else {
-                            // Log when no change is detected for debugging
-                            console.log('Polling: no chain change detected, still on:', currentChainId);
-                        }
-                    } catch (error) {
-                        console.error('Chain check failed:', error);
-                    }
-                }
-            }, 1500); // Check every 1.5 seconds (faster detection)
+    function stopChainCheck() {
+        if (chainCheckInterval) {
+            clearInterval(chainCheckInterval);
+            chainCheckInterval = null;
         }
+    }
 
-        function stopChainCheck() {
-            if (chainCheckInterval) {
-                clearInterval(chainCheckInterval);
-                chainCheckInterval = null;
-            }
-        }
+    // --- APP-WIDE PROVIDER SUBSCRIBER ---
+    window.appKit.subscribeProviders(async (providerState) => {
+        const eip1193Provider = providerState['eip155'];
 
-        // --- APP-WIDE PROVIDER SUBSCRIBER ---
-        window.appKit.subscribeProviders(async (providerState) => {
-            const eip1193Provider = providerState['eip155'];
-
-            try {
-                if (!eip1193Provider) {
-                    if (state.isWalletConnected) {
-                        showNotification('Wallet disconnected.', 'info');
-                        handleDisconnect();
-                    } else {
-                        connectWalletBtn.innerHTML = `
+        try {
+            if (!eip1193Provider) {
+                if (state.isWalletConnected) {
+                    showNotification('Wallet disconnected.', 'info');
+                    handleDisconnect();
+                } else {
+                    connectWalletBtn.innerHTML = `
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                                     <span>Connect Wallet</span>`;
-                        connectWalletBtn.disabled = false;
-                    }
-                    return;
+                    connectWalletBtn.disabled = false;
+                }
+                return;
+            }
+
+            // Store provider reference
+            state.eip1193Provider = eip1193Provider;
+
+            const ethersProvider = new ethers.BrowserProvider(eip1193Provider);
+            const signer = await ethersProvider.getSigner();
+            const address = await signer.getAddress();
+            const network = await ethersProvider.getNetwork();
+            const chainId = Number(network.chainId);
+
+            // Check if chain is supported
+            if (!CHAINS_CONFIG[chainId]) {
+                showNotification('Unsupported network. Please switch to a supported chain.', 'error');
+                chainSelector.value = ''; // Reset dropdown
+                state.currentChain = null;
+                state.batchContract = null;
+                dispatchBtn.disabled = true;
+                return;
+            }
+
+            // Update chain display and contract
+            console.log('Initial connection - updating chain display for chainId:', chainId);
+            updateChainDisplay(chainId);
+
+            const isNewConnection = !state.isWalletConnected;
+            const isAccountChange = state.isWalletConnected && address.toLowerCase() !== state.walletAddress?.toLowerCase();
+
+            if (isNewConnection || isAccountChange) {
+                if (isAccountChange) {
+                    showNotification('Wallet account changed.', 'info');
                 }
 
-                // Store provider reference
-                state.eip1193Provider = eip1193Provider;
-
-                const ethersProvider = new ethers.BrowserProvider(eip1193Provider);
-                const signer = await ethersProvider.getSigner();
-                const address = await signer.getAddress();
-                const network = await ethersProvider.getNetwork();
-                const chainId = Number(network.chainId);
-
-                // Check if chain is supported
-                if (!CHAINS_CONFIG[chainId]) {
-                    showNotification('Unsupported network. Please switch to a supported chain.', 'error');
-                    chainSelector.value = ''; // Reset dropdown
-                    state.currentChain = null;
-                    state.batchContract = null;
-                    dispatchBtn.disabled = true;
-                    return;
-                }
+                state.walletAddress = ethers.getAddress(address);
+                state.provider = ethersProvider;
+                state.signer = signer;
 
                 // Update chain display and contract
-                console.log('Initial connection - updating chain display for chainId:', chainId);
                 updateChainDisplay(chainId);
 
-                const isNewConnection = !state.isWalletConnected;
-                const isAccountChange = state.isWalletConnected && address.toLowerCase() !== state.walletAddress?.toLowerCase();
+                state.isWalletConnected = true;
+                const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
 
-                if (isNewConnection || isAccountChange) {
-                    if (isAccountChange) {
-                        showNotification('Wallet account changed.', 'info');
-                    }
+                connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700', 'bg-red-500', 'hover:bg-red-600');
+                connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                connectWalletBtn.disabled = false;
 
-                    state.walletAddress = ethers.getAddress(address);
-                    state.provider = ethersProvider;
-                    state.signer = signer;
+                appContent.classList.remove('hidden');
+                updateStepIndicator(2);
 
-                    // Update chain display and contract
-                    updateChainDisplay(chainId);
+                // Enable chain selector when connected
+                chainSelector.disabled = false;
 
-                    state.isWalletConnected = true;
-                    const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
-
-                    connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                    connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700', 'bg-red-500', 'hover:bg-red-600');
-                    connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
-                    connectWalletBtn.disabled = false;
-
-                    appContent.classList.remove('hidden');
-                    updateStepIndicator(2);
-
-                    // Enable chain selector when connected
-                    chainSelector.disabled = false;
-
-                    if (isNewConnection) {
-                        showNotification(`Wallet connected on ${state.currentChain?.name || 'network'}: ${truncatedAddress}`, 'success');
-                        startChainCheck(); // Start monitoring chain changes
-                    }
-
-                    if (state.token === 'ERC20' && ethers.isAddress(erc20Address.value)) {
-                        await validateERC20Address(erc20Address.value);
-                    }
-                    await updateSummary();
-
-                    // CRITICAL FIX: Only add listeners once
-                    if (!state.accountsChangedListenerAdded) {
-                        state.accountsChangedListenerAdded = true;
-
-                        // Listen for account changes
-                        eip1193Provider.on('accountsChanged', async (accounts) => {
-                            if (accounts.length === 0) {
-                                showNotification('Wallet disconnected or no accounts available.', 'info');
-                                handleDisconnect();
-                                return;
-                            }
-
-                            const newAddress = ethers.getAddress(accounts[0]);
-                            if (state.isWalletConnected && state.walletAddress && newAddress.toLowerCase() !== state.walletAddress.toLowerCase()) {
-                                showNotification('Wallet account changed.', 'info');
-
-                                // Update state with new account
-                                state.walletAddress = newAddress;
-                                const ethersProvider = new ethers.BrowserProvider(eip1193Provider);
-                                state.signer = await ethersProvider.getSigner();
-
-                                // Get current chain and update contract
-                                const network = await ethersProvider.getNetwork();
-                                const currentChainId = Number(network.chainId);
-                                console.log('Account changed - updating chain display for chainId:', currentChainId);
-                                updateChainDisplay(currentChainId);
-
-                                // Update UI
-                                const truncatedAddress = `${newAddress.slice(0, 6)}...${newAddress.slice(-4)}`;
-                                connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
-                                connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700', 'bg-red-500', 'hover:bg-red-600');
-                                connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
-                                connectWalletBtn.disabled = false;
-
-                                appContent.classList.remove('hidden');
-                                updateStepIndicator(2);
-
-                                // Re-validate ERC-20 token if applicable
-                                if (state.token === 'ERC20' && ethers.isAddress(erc20Address.value)) {
-                                    await validateERC20Address(erc20Address.value);
-                                }
-                                await updateSummary();
-                            }
-                        });
-
-                        // Listen for chain changes with locking to prevent race conditions
-                        let isProcessingChainChange = false;
-
-                        eip1193Provider.on('chainChanged', async (chainIdHex) => {
-                            if (isProcessingChainChange) {
-                                console.log('Chain change already in progress, skipping');
-                                return;
-                            }
-
-                            isProcessingChainChange = true;
-
-                            try {
-                                const newChainId = Number(chainIdHex);
-                                console.log('Chain changed event fired, newChainId:', newChainId, 'Hex was:', chainIdHex);
-
-                                // Check if chain is supported
-                                if (!CHAINS_CONFIG[newChainId]) {
-                                    console.log('Chain not supported:', newChainId);
-                                    showNotification(`Unsupported network (Chain ID: ${newChainId}). Please switch to a supported chain.`, 'error');
-                                    return;
-                                }
-
-                                console.log('Attempting to update provider and signer for new chain');
-
-                                // Update provider and signer for new chain
-                                const ethersProvider = new ethers.BrowserProvider(eip1193Provider);
-                                state.provider = ethersProvider;
-
-                                // Get the signer for the new chain
-                                state.signer = await ethersProvider.getSigner();
-
-                                // Update chain display and contract
-                                updateChainDisplay(newChainId);
-
-                                // Manually update the batchContract with the new chain's contract address
-                                if (state.signer && CONTRACT_ABI && CHAINS_CONFIG[newChainId]) {
-                                    state.batchContract = new ethers.Contract(
-                                        CHAINS_CONFIG[newChainId].contractAddress,
-                                        CONTRACT_ABI,
-                                        state.signer
-                                    );
-                                    console.log('Manually updated batchContract for chainId:', newChainId);
-                                }
-
-                                console.log('Successfully switched to chainId:', newChainId, 'Name:', state.currentChain?.name);
-                                showNotification(`Switched to ${state.currentChain?.name || 'network'} (Chain ID: ${newChainId})`, 'success');
-
-                                // Ensure dropdown reflects the actual current chain
-                                if (state.currentChain) {
-                                    chainSelector.value = state.currentChain.chainId.toString();
-                                    console.log('Updated dropdown value to:', chainSelector.value);
-                                }
-
-                                // Re-validate ERC-20 token if applicable
-                                if (state.token === 'ERC20' && ethers.isAddress(erc20Address.value)) {
-                                    await validateERC20Address(erc20Address.value);
-                                }
-                                await updateSummary();
-
-                                // Force update the UI elements to reflect the new chain
-                                if (state.currentChain) {
-                                    console.log('Chain switch complete, UI updated for:', state.currentChain.name);
-                                }
-                            } catch (error) {
-                                console.error('Chain change error:', error);
-                                showNotification(`Failed to switch network: ${error.message}`, 'error');
-                            } finally {
-                                isProcessingChainChange = false;
-                            }
-                        });
-                    }
+                if (isNewConnection) {
+                    showNotification(`Wallet connected on ${state.currentChain?.name || 'network'}: ${truncatedAddress}`, 'success');
+                    startChainCheck(); // Start monitoring chain changes
                 }
 
-            } catch (error) {
-                console.error('Subscriber error:', error);
-                showNotification(`Connection failed: ${error.message.substring(0, 100)}`, 'error');
-                handleDisconnect();
-                connectWalletBtn.innerHTML = `
+                if (state.token === 'ERC20' && ethers.isAddress(erc20Address.value)) {
+                    await validateERC20Address(erc20Address.value);
+                }
+                await updateSummary();
+
+                // CRITICAL FIX: Only add listeners once
+                if (!state.accountsChangedListenerAdded) {
+                    state.accountsChangedListenerAdded = true;
+
+                    // Listen for account changes
+                    eip1193Provider.on('accountsChanged', async (accounts) => {
+                        if (accounts.length === 0) {
+                            showNotification('Wallet disconnected or no accounts available.', 'info');
+                            handleDisconnect();
+                            return;
+                        }
+
+                        const newAddress = ethers.getAddress(accounts[0]);
+                        if (state.isWalletConnected && state.walletAddress && newAddress.toLowerCase() !== state.walletAddress.toLowerCase()) {
+                            showNotification('Wallet account changed.', 'info');
+
+                            // Update state with new account
+                            state.walletAddress = newAddress;
+                            const ethersProvider = new ethers.BrowserProvider(eip1193Provider);
+                            state.signer = await ethersProvider.getSigner();
+
+                            // Get current chain and update contract
+                            const network = await ethersProvider.getNetwork();
+                            const currentChainId = Number(network.chainId);
+                            console.log('Account changed - updating chain display for chainId:', currentChainId);
+                            updateChainDisplay(currentChainId);
+
+                            // Update UI
+                            const truncatedAddress = `${newAddress.slice(0, 6)}...${newAddress.slice(-4)}`;
+                            connectWalletBtn.innerHTML = `<span>Connected: ${truncatedAddress}</span>`;
+                            connectWalletBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700', 'bg-red-500', 'hover:bg-red-600');
+                            connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                            connectWalletBtn.disabled = false;
+
+                            appContent.classList.remove('hidden');
+                            updateStepIndicator(2);
+
+                            // Re-validate ERC-20 token if applicable
+                            if (state.token === 'ERC20' && ethers.isAddress(erc20Address.value)) {
+                                await validateERC20Address(erc20Address.value);
+                            }
+                            await updateSummary();
+                        }
+                    });
+
+                    // Listen for chain changes with locking to prevent race conditions
+                    let isProcessingChainChange = false;
+
+                    eip1193Provider.on('chainChanged', async (chainIdHex) => {
+                        if (isProcessingChainChange) {
+                            console.log('Chain change already in progress, skipping');
+                            return;
+                        }
+
+                        isProcessingChainChange = true;
+
+                        try {
+                            const newChainId = Number(chainIdHex);
+                            console.log('Chain changed event fired, newChainId:', newChainId, 'Hex was:', chainIdHex);
+
+                            // Check if chain is supported
+                            if (!CHAINS_CONFIG[newChainId]) {
+                                console.log('Chain not supported:', newChainId);
+                                showNotification(`Unsupported network (Chain ID: ${newChainId}). Please switch to a supported chain.`, 'error');
+                                return;
+                            }
+
+                            console.log('Attempting to update provider and signer for new chain');
+
+                            // Update provider and signer for new chain
+                            const ethersProvider = new ethers.BrowserProvider(eip1193Provider);
+                            state.provider = ethersProvider;
+
+                            // Get the signer for the new chain
+                            state.signer = await ethersProvider.getSigner();
+
+                            // Update chain display and contract
+                            updateChainDisplay(newChainId);
+
+                            // Manually update the batchContract with the new chain's contract address
+                            if (state.signer && CONTRACT_ABI && CHAINS_CONFIG[newChainId]) {
+                                state.batchContract = new ethers.Contract(
+                                    CHAINS_CONFIG[newChainId].contractAddress,
+                                    CONTRACT_ABI,
+                                    state.signer
+                                );
+                                console.log('Manually updated batchContract for chainId:', newChainId);
+                            }
+
+                            console.log('Successfully switched to chainId:', newChainId, 'Name:', state.currentChain?.name);
+                            showNotification(`Switched to ${state.currentChain?.name || 'network'} (Chain ID: ${newChainId})`, 'success');
+
+                            // Ensure dropdown reflects the actual current chain
+                            if (state.currentChain) {
+                                chainSelector.value = state.currentChain.chainId.toString();
+                                console.log('Updated dropdown value to:', chainSelector.value);
+                            }
+
+                            // Re-validate ERC-20 token if applicable
+                            if (state.token === 'ERC20' && ethers.isAddress(erc20Address.value)) {
+                                await validateERC20Address(erc20Address.value);
+                            }
+                            await updateSummary();
+
+                            // Force update the UI elements to reflect the new chain
+                            if (state.currentChain) {
+                                console.log('Chain switch complete, UI updated for:', state.currentChain.name);
+                            }
+                        } catch (error) {
+                            console.error('Chain change error:', error);
+                            showNotification(`Failed to switch network: ${error.message}`, 'error');
+                        } finally {
+                            isProcessingChainChange = false;
+                        }
+                    });
+                }
+            }
+
+        } catch (error) {
+            console.error('Subscriber error:', error);
+            showNotification(`Connection failed: ${error.message.substring(0, 100)}`, 'error');
+            handleDisconnect();
+            connectWalletBtn.innerHTML = `
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                             <span>Connect Wallet</span>`;
-                connectWalletBtn.disabled = false;
+            connectWalletBtn.disabled = false;
+        }
+    });
+
+    // --- INITIALIZATION ---
+    updateStepIndicator(state.currentStep);
+
+    // Check for existing connection on page load
+    (async () => {
+        try {
+            // Wait a bit for AppKit to initialize
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            const initialState = window.appKit.getState();
+            const eip1193Provider = initialState?.providerType === 'injected' || initialState?.providerType === 'walletConnect'
+                ? await window.appKit.getWalletProvider()
+                : null;
+
+            if (eip1193Provider) {
+                console.log('Found existing connection on page load');
+                // Trigger the provider subscriber manually
+                window.appKit.subscribeProviders(() => { });
             }
-        });
-
-        // --- INITIALIZATION ---
-        updateStepIndicator(state.currentStep);
-
-        // Check for existing connection on page load
-        (async () => {
-            try {
-                // Wait a bit for AppKit to initialize
-                await new Promise(resolve => setTimeout(resolve, 1500));
-
-                const initialState = window.appKit.getState();
-                const eip1193Provider = initialState?.providerType === 'injected' || initialState?.providerType === 'walletConnect'
-                    ? await window.appKit.getWalletProvider()
-                    : null;
-
-                if (eip1193Provider) {
-                    console.log('Found existing connection on page load');
-                    // Trigger the provider subscriber manually
-                    window.appKit.subscribeProviders(() => { });
-                }
-            } catch (error) {
-                console.log('No existing connection found:', error);
-            }
-        })();
-
-        // --- FETCH CHAINS & START APP ---
-        fetch('/chains.json')
-            .then(res => res.json())
-            .then(config => {
-                CHAINS_CONFIG = config.chains;
-                CONTRACT_ABI = config.abi;
-                console.log('✅ Loaded chains configuration:', Object.keys(CHAINS_CONFIG));
-
-                // Validate configuration
-                if (!CHAINS_CONFIG || Object.keys(CHAINS_CONFIG).length === 0) {
-                    throw new Error('Empty chain configuration');
-                }
-
-                Object.entries(CHAINS_CONFIG).forEach(([chainId, chain]) => {
-                    if (!chain.name || !chain.contractAddress || !chain.rpcUrl) {
-                        throw new Error(`Invalid chain configuration for chain ${chainId}: missing required properties`);
-                    }
-                    if (!ethers.isAddress(chain.contractAddress)) {
-                        throw new Error(`Invalid contract address for chain ${chainId}: ${chain.contractAddress}`);
-                    }
-                });
-
-                console.log('Chain configuration validated successfully');
-                populateChainSelector();
-                updateChainDisplay(8453); // Set Base as default UI
-                setupEventListeners();
-            })
-            .catch(e => {
-                console.error('❌ Failed loading chains.json:', e);
-                showNotification('Failed to load chain configuration. Please refresh the page.', 'error');
-            });
-    }
+        } catch (error) {
+            console.log('No existing connection found:', error);
+        }
+    })();
 }
