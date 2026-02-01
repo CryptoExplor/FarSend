@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import confetti from 'canvas-confetti';
 import { createAppKit } from '@reown/appkit';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
-import { mainnet, base, optimism, arbitrum } from '@reown/appkit/networks';
+import { mainnet, base, optimism, arbitrum, bsc, avalanche, polygon } from '@reown/appkit/networks';
 import { sdk } from '@farcaster/miniapp-sdk';
 
 // Initialize Farcaster SDK
@@ -19,7 +19,7 @@ let appKit;
     try {
         appKit = await createAppKit({
             projectId: '0c80bc29a555c719ed2410c54b52a16d',
-            networks: [base, mainnet, optimism, arbitrum],
+            networks: [base, mainnet, optimism, arbitrum, bsc, avalanche, polygon],
             adapters: [new EthersAdapter()],
             metadata: {
                 name: 'FarSend',
@@ -604,7 +604,10 @@ function initializeApp() {
                 const explorerName = state.currentChain?.explorerUrl?.includes('basescan') ? 'BaseScan' :
                     state.currentChain?.explorerUrl?.includes('etherscan') ? 'Etherscan' :
                         state.currentChain?.explorerUrl?.includes('optimistic') ? 'Optimistic Etherscan' :
-                            state.currentChain?.explorerUrl?.includes('arbiscan') ? 'Arbiscan' : 'Explorer';
+                            state.currentChain?.explorerUrl?.includes('arbiscan') ? 'Arbiscan' :
+                                state.currentChain?.explorerUrl?.includes('bscscan') ? 'BscScan' :
+                                    state.currentChain?.explorerUrl?.includes('snowtrace') ? 'Snowtrace' :
+                                        state.currentChain?.explorerUrl?.includes('polygonscan') ? 'PolygonScan' : 'Explorer';
                 const message = `✅ Success! Batch of ${recipients.length} transfers confirmed.<br>
                                 <a href="${explorerUrl}/tx/${receipt.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on ${explorerName}</a>`;
                 showNotification(message, 'success');
