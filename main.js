@@ -1293,14 +1293,19 @@ function initializeApp() {
             await new Promise(resolve => setTimeout(resolve, 500));
 
             const initialState = window.appKit.getState();
-            const eip1193Provider = initialState?.providerType === 'injected' || initialState?.providerType === 'walletConnect'
-                ? await window.appKit.getWalletProvider()
-                : null;
+            console.log('Initial AppKit state:', initialState);
+
+            // Try to get the wallet provider
+            const eip1193Provider = await window.appKit.getWalletProvider();
 
             if (eip1193Provider) {
-                console.log('Found existing connection on page load');
-                // Trigger the provider subscriber manually
-                window.appKit.subscribeProviders(() => { });
+                console.log('Found existing wallet provider on page load, triggering connection handler');
+                // Manually trigger the subscriber with the provider
+                window.appKit.subscribeProviders(async (providerState) => {
+                    // This will trigger the main subscriber above
+                });
+            } else {
+                console.log('No existing provider found');
             }
         } catch (error) {
             console.log('No existing connection found:', error);
