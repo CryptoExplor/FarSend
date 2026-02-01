@@ -76,8 +76,7 @@ function initializeApp() {
 
             console.log('Chain configuration validated successfully');
             populateChainSelector();
-            updateChainDisplay(8453); // Set Base as default UI
-            setupEventListeners();
+            updateChainDisplay(8453); // Set Base as default
         })
         .catch(e => {
             console.error('❌ Failed loading chains.json:', e);
@@ -854,8 +853,6 @@ function initializeApp() {
 
     // --- EVENT LISTENERS ---
 
-    // Populate and handle chain selector
-    populateChainSelector();
     chainSelector.disabled = true; // Disabled until wallet connects
 
     // Debounced chain switch to prevent race conditions
