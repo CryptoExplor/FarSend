@@ -96,6 +96,7 @@ function initializeApp() {
     const connectWalletBtn = document.getElementById('connectWalletBtn');
     const appContent = document.getElementById('app-content');
     const chainSelector = document.getElementById('chainSelector');
+    chainSelector.disabled = true; // Disabled until wallet connects
     const tokenSelect = document.getElementById('tokenSelect');
     const erc20InputContainer = document.getElementById('erc20InputContainer');
     const erc20Address = document.getElementById('erc20Address');
@@ -853,10 +854,6 @@ function initializeApp() {
 
     // --- EVENT LISTENERS ---
 
-    // Populate and handle chain selector
-    populateChainSelector();
-    chainSelector.disabled = true; // Disabled until wallet connects
-
     // Debounced chain switch to prevent race conditions
     let chainSwitchTimeout;
     chainSelector.addEventListener('change', async (e) => {
@@ -1293,7 +1290,7 @@ function initializeApp() {
     (async () => {
         try {
             // Wait a bit for AppKit to initialize
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             const initialState = window.appKit.getState();
             const eip1193Provider = initialState?.providerType === 'injected' || initialState?.providerType === 'walletConnect'
