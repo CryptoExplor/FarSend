@@ -76,6 +76,7 @@ function initializeApp() {
 
             console.log('Chain configuration validated successfully');
             populateChainSelector();
+            updateChainDisplay(8453); // Set Base as default UI
             setupEventListeners();
         })
         .catch(e => {
@@ -168,7 +169,19 @@ function initializeApp() {
                 );
             }
 
+            if (state.token === 'ETH') {
+                state.tokenInfo.symbol = chain.nativeCurrency?.symbol || 'ETH';
+                state.tokenInfo.decimals = chain.nativeCurrency?.decimals || 18;
+
+                // Update the dropdown option text
+                const nativeOption = Array.from(tokenSelect.options).find(opt => opt.value === 'ETH');
+                if (nativeOption) {
+                    nativeOption.textContent = state.tokenInfo.symbol;
+                }
+            }
+
             showNotification(`Network set to ${chain.name}`, 'success');
+            updateSummary(); // Refresh summary with new symbol
         } else {
             chainSelector.value = '';
             showNotification('Unsupported network selected', 'error');
@@ -979,7 +992,15 @@ function initializeApp() {
             tokenSymbolDisplay.textContent = '';
             tokenInfoRow.classList.add('hidden');
             approvalSection.classList.add('hidden');
-            state.tokenInfo = { address: '', symbol: 'ETH', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
+            const symbol = state.currentChain?.nativeCurrency?.symbol || 'ETH';
+            const decimals = state.currentChain?.nativeCurrency?.decimals || 18;
+            state.tokenInfo = { address: '', symbol: symbol, decimals: decimals, contract: null, allowance: 0n, requiredAllowance: 0n };
+
+            // Update the dropdown option text
+            const nativeOption = Array.from(tokenSelect.options).find(opt => opt.value === 'ETH');
+            if (nativeOption) {
+                nativeOption.textContent = symbol;
+            }
         }
         parseAndValidateData(recipientsTextarea.value, 'text');
     });
