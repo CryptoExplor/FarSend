@@ -1290,7 +1290,7 @@ function initializeApp() {
     (async () => {
         try {
             // Wait a bit for AppKit to initialize
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             const initialState = window.appKit.getState();
             console.log('Initial AppKit state:', initialState);
