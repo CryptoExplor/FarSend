@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FarSend - Private Batch Sender</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
@@ -36,15 +37,18 @@
 
     <!-- Farcaster & OpenGraph Meta -->
     <meta name="title" content="FarSend - Private Batch Sender">
-    <meta name="description" content="Send ETH to multiple wallets privately and securely on Base. Built for Farcaster & Base Mini Apps.">
+    <meta name="description"
+        content="Send ETH to multiple wallets privately and securely on Base. Built for Farcaster & Base Mini Apps.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://farsend.vercel.app/">
     <meta property="og:title" content="FarSend - Private Batch Sender for ETH">
-    <meta property="og:description" content="Batch-send ETH to multiple wallets with privacy and security. Perfect for airdrops, rewards, and stealth transfers.">
+    <meta property="og:description"
+        content="Batch-send ETH to multiple wallets with privacy and security. Perfect for airdrops, rewards, and stealth transfers.">
     <meta property="og:image" content="https://farsend.vercel.app/splash.png">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="FarSend - Private Batch Sender for ETH">
-    <meta name="twitter:description" content="Batch-send ETH to multiple wallets with privacy and security. Perfect for airdrops, rewards, and stealth transfers.">
+    <meta name="twitter:description"
+        content="Batch-send ETH to multiple wallets with privacy and security. Perfect for airdrops, rewards, and stealth transfers.">
     <meta name="twitter:image" content="https://farsend.vercel.app/splash.png">
     <meta name="farcaster:image" content="https://farsend.vercel.app/splash.png">
 
@@ -64,7 +68,7 @@
         .main-card {
             background-color: #ffffff;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-            border: 1px solid #E5E7EB; 
+            border: 1px solid #E5E7EB;
         }
 
         .btn-primary {
@@ -72,10 +76,12 @@
             box-shadow: 0 4px 15px rgba(106, 60, 255, 0.4);
             color: white;
         }
+
         .btn-primary:hover {
             background: var(--fc-primary-hover);
             box-shadow: 0 0 12px rgba(162, 107, 255, 0.6);
         }
+
         .btn-primary:disabled {
             background: #E5E7EB;
             color: #9CA3AF;
@@ -83,17 +89,33 @@
             opacity: 1;
             box-shadow: none;
         }
-        
+
         .input-focus:focus {
-             border-color: #6A3CFF !important;
-             box-shadow: 0 0 12px rgba(106, 60, 255, 0.4) !important;
-             transition: box-shadow 0.2s ease;
+            border-color: #6A3CFF !important;
+            box-shadow: 0 0 12px rgba(106, 60, 255, 0.4) !important;
+            transition: box-shadow 0.2s ease;
         }
 
-        textarea::-webkit-scrollbar, .overflow-auto::-webkit-scrollbar { width: 8px; }
-        textarea::-webkit-scrollbar-track, .overflow-auto::-webkit-scrollbar-track { background: #F3F4F6; }
-        textarea::-webkit-scrollbar-thumb, .overflow-auto::-webkit-scrollbar-thumb { background: #6A3CFF; border-radius: 10px; }
-        textarea::-webkit-scrollbar-thumb:hover, .overflow-auto::-webkit-scrollbar-thumb:hover { background: #582FD6; }
+        textarea::-webkit-scrollbar,
+        .overflow-auto::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        textarea::-webkit-scrollbar-track,
+        .overflow-auto::-webkit-scrollbar-track {
+            background: #F3F4F6;
+        }
+
+        textarea::-webkit-scrollbar-thumb,
+        .overflow-auto::-webkit-scrollbar-thumb {
+            background: #6A3CFF;
+            border-radius: 10px;
+        }
+
+        textarea::-webkit-scrollbar-thumb:hover,
+        .overflow-auto::-webkit-scrollbar-thumb:hover {
+            background: #582FD6;
+        }
 
         #notification {
             transition: opacity 0.5s ease, transform 0.5s ease;
@@ -105,51 +127,67 @@
             transform: translateX(-50%) translateY(20px);
             z-index: 50;
         }
+
         #notification.show {
             opacity: 1;
             transform: translateX(-50%) translateY(0);
         }
 
         @keyframes gradient-x {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
+
+            0%,
+            100% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
         }
+
         .animate-gradient-x {
-          background-size: 200% 200%;
-          animation: gradient-x 6s ease infinite;
+            background-size: 200% 200%;
+            animation: gradient-x 6s ease infinite;
         }
 
         #stepIndicator .flex-1.h-0\.5.bg-gray-200.mt-4.mx-2 {
-          background: var(--fc-primary);
+            background: var(--fc-primary);
         }
     </style>
 </head>
+
 <body class="text-gray-900 min-h-screen flex items-center justify-center p-4">
 
     <div class="w-full max-w-2xl mx-auto">
         <!-- Header -->
         <header class="text-center mb-8">
             <div class="flex justify-center items-center mb-2">
-                <h1 class="text-5xl font-extrabold tracking-tight bg-gradient-to-r from-[#6A3CFF] via-[#A26BFF] to-[#00E7FF] text-transparent bg-clip-text animate-gradient-x">FarSend</h1>
+                <h1
+                    class="text-5xl font-extrabold tracking-tight bg-gradient-to-r from-[#6A3CFF] via-[#A26BFF] to-[#00E7FF] text-transparent bg-clip-text animate-gradient-x">
+                    FarSend</h1>
             </div>
             <p class="text-gray-600 mt-2">Multi-chain batch sender for ETH & ERC-20 tokens</p>
         </header>
 
         <!-- Main App Interface -->
         <main class="main-card rounded-2xl p-6 md:p-8 space-y-6">
-            
+
             <!-- Progress Stepper UI Component -->
             <div id="stepIndicator" class="flex justify-between items-start mb-8 pb-4 border-b border-gray-100">
                 <div class="flex flex-col items-center flex-1 min-w-0">
-                    <div id="stepCircle1" class="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 ring-4 ring-purple-500 ring-opacity-50" style="background-color: #6A3CFF; color: white; border-color: #6A3CFF;">
+                    <div id="stepCircle1"
+                        class="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 ring-4 ring-purple-500 ring-opacity-50"
+                        style="background-color: #6A3CFF; color: white; border-color: #6A3CFF;">
                         <span class="font-bold">1</span>
                     </div>
-                    <span id="stepLabel1" class="text-xs mt-2 text-center font-semibold" style="color: #6A3CFF;">Connect Wallet</span>
+                    <span id="stepLabel1" class="text-xs mt-2 text-center font-semibold" style="color: #6A3CFF;">Connect
+                        Wallet</span>
                 </div>
                 <div class="flex-1 h-0.5 bg-gray-200 mt-4 mx-2"></div>
-                
+
                 <div class="flex flex-col items-center flex-1 min-w-0">
-                    <div id="stepCircle2" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 text-gray-500 transition-all duration-300">
+                    <div id="stepCircle2"
+                        class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 text-gray-500 transition-all duration-300">
                         <span class="font-bold">2</span>
                     </div>
                     <span id="stepLabel2" class="text-xs mt-2 text-center text-gray-500">Define Recipients</span>
@@ -157,80 +195,115 @@
                 <div class="flex-1 h-0.5 bg-gray-200 mt-4 mx-2"></div>
 
                 <div class="flex flex-col items-center flex-1 min-w-0">
-                    <div id="stepCircle3" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 text-gray-500 transition-all duration-300">
+                    <div id="stepCircle3"
+                        class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 text-gray-500 transition-all duration-300">
                         <span class="font-bold">3</span>
                     </div>
                     <span id="stepLabel3" class="text-xs mt-2 text-center text-gray-500">Dispatch</span>
                 </div>
             </div>
-            
+
             <!-- Chain Selector -->
             <div class="flex flex-col space-y-3 py-2">
                 <div class="flex justify-between items-center">
                     <h2 class="text-lg font-semibold text-gray-800">Network</h2>
                     <div class="relative">
-                        <select id="chainSelector" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-48 p-2.5 input-focus outline-none transition duration-150 appearance-none">
+                        <select id="chainSelector"
+                            class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-48 p-2.5 input-focus outline-none transition duration-150 appearance-none">
                             <option value="">Select Network</option>
                         </select>
-                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <div
+                            class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
                             <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                             </svg>
                         </div>
                     </div>
                 </div>
             </div>
-            
+
             <!-- Step 1: Wallet Connection & Farcaster POC -->
             <div class="flex flex-col space-y-3 py-2">
                 <!-- Wallet Button -->
                 <div class="flex justify-between items-center">
                     <h2 class="text-lg font-semibold text-gray-800">Wallet</h2>
-                    <button id="connectWalletBtn" class="w-48 btn-primary font-semibold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center space-x-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    <button id="connectWalletBtn"
+                        class="w-48 btn-primary font-semibold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z">
+                            </path>
+                        </svg>
                         <span>Connect Wallet</span>
                     </button>
                 </div>
             </div>
-            
+
             <div id="app-content" class="hidden space-y-6">
-                
+
                 <!-- Separator -->
                 <div class="h-px bg-gray-100"></div>
 
                 <!-- Step 2: Token & Recipients -->
                 <div>
                     <h2 class="text-lg font-semibold text-gray-800 mb-4">Define Token & Recipients</h2>
-                    
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label for="tokenSelect" class="block text-sm font-medium text-gray-600 mb-1">Asset Type</label>
-                            <select id="tokenSelect" class="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 input-focus outline-none transition duration-150">
+                            <label for="tokenSelect" class="block text-sm font-medium text-gray-600 mb-1">Asset
+                                Type</label>
+                            <select id="tokenSelect"
+                                class="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 input-focus outline-none transition duration-150">
                                 <option value="ETH"> ETH </option>
                                 <option value="ERC20">ERC-20 Token</option>
                             </select>
                         </div>
                         <div id="erc20InputContainer" class="hidden">
-                             <label for="erc20Address" class="block text-sm font-medium text-gray-600 mb-1">Token Contract Address</label>
+                            <label for="erc20Address" class="block text-sm font-medium text-gray-600 mb-1">Token
+                                Contract Address</label>
                             <div class="relative">
-                                <input type="text" id="erc20Address" placeholder="0x..." class="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 pr-20 input-focus outline-none transition duration-150">
-                                <span id="tokenSymbolDisplay" class="absolute right-0 top-0 h-full flex items-center pr-3 text-xs text-gray-500 font-medium"></span>
+                                <input type="text" id="erc20Address" placeholder="0x..."
+                                    class="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 pr-20 input-focus outline-none transition duration-150">
+                                <span id="tokenSymbolDisplay"
+                                    class="absolute right-0 top-0 h-full flex items-center pr-3 text-xs text-gray-500 font-medium"></span>
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="mt-6">
-                        <label for="recipients" class="block text-sm font-medium text-gray-600 mb-1">Recipients & Amounts</label>
-                        <textarea id="recipients" rows="6" class="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm input-focus outline-none transition duration-150 text-gray-900" placeholder="Enter one address and amount per line, separated by a comma or space.&#10;e.g.,&#10;0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B, 1.5&#10;0x5B38Da6a701c568545dCfcB03FcB875f56beddC4 10.75"></textarea>
-                        
+                        <div
+                            class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-2 space-y-2 sm:space-y-0">
+                            <label for="recipients" class="block text-sm font-medium text-gray-600">Recipients &
+                                Amounts</label>
+
+                            <!-- Bulk Fill Option -->
+                            <div
+                                class="flex items-center space-x-2 bg-purple-50 p-1.5 rounded-xl border border-purple-100 shadow-sm">
+                                <span class="text-[10px] font-bold text-purple-600 uppercase tracking-wider ml-1">Add
+                                    Amount to All:</span>
+                                <input type="number" id="bulkAmount" placeholder="0.0" step="any"
+                                    class="w-24 bg-white border border-purple-200 rounded-lg p-1.5 text-xs focus:ring-2 focus:ring-purple-400 outline-none transition-all">
+                                <button id="applyBulkAmountBtn"
+                                    class="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition-all active:scale-95 shadow-sm">
+                                    Add Amount
+                                </button>
+                            </div>
+                        </div>
+                        <textarea id="recipients" rows="6"
+                            class="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm input-focus outline-none transition duration-150 text-gray-900"
+                            placeholder="Enter one address and amount per line, separated by a comma or space.&#10;e.g.,&#10;0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B, 1.5&#10;0x5B38Da6a701c568545dCfcB03FcB875f56beddC4 10.75"></textarea>
+
                         <div class="flex justify-end text-xs text-gray-500 mt-2 space-x-4">
-                             <a href="#" id="exportListBtn" class="cursor-pointer font-medium hover:underline" style="color: #6A3CFF;">Export List (.csv)</a>
-                            <span>Or, <label for="csvUpload" class="cursor-pointer font-medium hover:underline" style="color: #6A3CFF;">upload a file</label></span>
+                            <a href="#" id="exportListBtn" class="cursor-pointer font-medium hover:underline"
+                                style="color: #6A3CFF;">Export List (.csv)</a>
+                            <span>Or, <label for="csvUpload" class="cursor-pointer font-medium hover:underline"
+                                    style="color: #6A3CFF;">upload a file</label></span>
                             <input type="file" id="csvUpload" class="hidden" accept=".csv, .txt, .json">
                         </div>
                     </div>
-                     
-                     <!-- CSV/JSON Preview -->
+
+                    <!-- CSV/JSON Preview -->
                     <div id="dataPreview" class="hidden mt-4">
                         <h4 class="text-sm font-medium text-gray-600 mb-2">Data Preview</h4>
                         <div class="main-card rounded-lg p-3 max-h-32 overflow-auto text-xs border border-gray-200">
@@ -250,15 +323,21 @@
 
                 <!-- Separator -->
                 <div class="h-px bg-gray-100"></div>
-                
+
                 <!-- ERC-20 Approval Step -->
                 <div id="approvalSection" class="p-4 bg-yellow-50 rounded-lg border border-yellow-200 hidden">
                     <p class="text-sm text-yellow-800 mb-3 font-semibold flex items-center">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
+                        </svg>
                         Token Approval Required
                     </p>
                     <p id="approvalMessage" class="text-sm text-yellow-700"></p>
-                    <button id="approveBtn" class="w-full mt-3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300">
+                    <button id="approveBtn"
+                        class="w-full mt-3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300">
                         Approve <span id="approveAmount">0.00</span> <span id="approveSymbol">Token</span>
                     </button>
                 </div>
@@ -276,7 +355,7 @@
                             <span class="text-gray-600">Total Amount:</span>
                             <span id="totalAmount" class="font-mono font-bold text-gray-900">0.00</span>
                         </div>
-                         <div id="tokenInfoRow" class="hidden flex justify-between items-center">
+                        <div id="tokenInfoRow" class="hidden flex justify-between items-center">
                             <span class="text-gray-600">Token Contract:</span>
                             <span id="tokenContractDisplay" class="font-mono text-xs font-bold text-gray-900"></span>
                         </div>
@@ -285,30 +364,39 @@
                             <span class="font-bold text-gray-900">Batch Send</span>
                         </div>
                     </div>
-                    
+
                     <!-- Dispatch Button -->
-                    <button id="dispatchBtn" disabled class="w-full mt-6 btn-primary font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-[1.01] duration-300 flex items-center justify-center space-x-3">
-                        <svg id="shieldIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 20.944A12.02 12.02 0 0012 22a12.02 12.02 0 009-1.056h.001c.34.34.71.656 1.088.943l.044.032c.29.213.636.35.995.396V20.944c0-2.042-.393-4.005-1.12-5.786z"></path></svg>
+                    <button id="dispatchBtn" disabled
+                        class="w-full mt-6 btn-primary font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-[1.01] duration-300 flex items-center justify-center space-x-3">
+                        <svg id="shieldIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 20.944A12.02 12.02 0 0012 22a12.02 12.02 0 009-1.056h.001c.34.34.71.656 1.088.943l.044.032c.29.213.636.35.995.396V20.944c0-2.042-.393-4.005-1.12-5.786z">
+                            </path>
+                        </svg>
                         <span id="dispatchBtnText">Dispatch Batch</span>
-                        <div id="loadingSpinner" class="hidden animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                        <div id="loadingSpinner"
+                            class="hidden animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                     </button>
                 </div>
             </div>
         </main>
-        
+
         <!-- Footer -->
-        <footer class="text-center text-sm mt-8 bg-gradient-to-r from-[#6A3CFF] to-[#A26BFF] text-white p-4 rounded-lg shadow-md">
+        <footer
+            class="text-center text-sm mt-8 bg-gradient-to-r from-[#6A3CFF] to-[#A26BFF] text-white p-4 rounded-lg shadow-md">
             <p>Built for the Farcaster & Base Ecosystem</p>
             <p>Multi-chain batch sender for Ethereum L1 & L2s</p>
             <p><a href="https://farcaster.xyz/dare1.eth" target="_blank" class="underline">dare1.eth</a></p>
             <p>&copy; 2025 FarSend</p>
         </footer>
     </div>
-    
+
     <!-- Notification Area -->
     <div id="notification" class="p-4 rounded-lg text-sm main-card shadow-lg" style="border: 1px solid #A98EFF;"></div>
 
     <!-- Load main app script -->
     <script type="module" src="/main.js"></script>
 </body>
+
 </html>
