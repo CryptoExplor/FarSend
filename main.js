@@ -102,6 +102,8 @@ function initializeApp() {
     const erc20Address = document.getElementById('erc20Address');
     const tokenSymbolDisplay = document.getElementById('tokenSymbolDisplay');
     const recipientsTextarea = document.getElementById('recipients');
+    const bulkAmountInput = document.getElementById('bulkAmount');
+    const applyBulkAmountBtn = document.getElementById('applyBulkAmountBtn');
     const csvUpload = document.getElementById('csvUpload');
     const recipientCountEl = document.getElementById('recipientCount');
     const totalAmountEl = document.getElementById('totalAmount');
@@ -1015,6 +1017,47 @@ function initializeApp() {
     });
 
     recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
+
+    applyBulkAmountBtn.addEventListener('click', () => {
+        const amount = bulkAmountInput.value.trim();
+        if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+            showNotification('Please enter a valid amount to apply to all addresses.', 'error');
+            return;
+        }
+
+        const lines = recipientsTextarea.value.split('\n');
+        let addressesFound = 0;
+
+        const updatedLines = lines.map(line => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) return '';
+
+            // Extract the first part which should be the address
+            const parts = trimmedLine.split(/[\s,]+/).filter(p => p.trim());
+            if (parts.length === 0) return '';
+
+            const firstPart = parts[0];
+            // Check if first part looks like an address (0x...)
+            if (firstPart.startsWith('0x') && firstPart.length >= 40) {
+                addressesFound++;
+                return `${firstPart}, ${amount}`;
+            }
+            return trimmedLine;
+        }).filter(line => line !== '');
+
+        if (addressesFound === 0) {
+            showNotification('No valid addresses found to apply the amount to. Paste addresses first.', 'error');
+            return;
+        }
+
+        recipientsTextarea.value = updatedLines.join('\n');
+        parseAndValidateData(recipientsTextarea.value, 'text');
+        showNotification(`Applied ${amount} to ${addressesFound} addresses.`, 'success');
+
+        // Visual feedback
+        applyBulkAmountBtn.classList.add('bg-green-600');
+        setTimeout(() => applyBulkAmountBtn.classList.remove('bg-green-600'), 1000);
+    });
 
     csvUpload.addEventListener('change', (event) => {
         const file = event.target.files[0];
