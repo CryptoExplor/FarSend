@@ -104,6 +104,16 @@ function initializeApp() {
     const recipientsTextarea = document.getElementById('recipients');
     const bulkAmountInput = document.getElementById('bulkAmount');
     const applyBulkAmountBtn = document.getElementById('applyBulkAmountBtn');
+
+    // New Distribution Tool Elements
+    const setFixedModeBtn = document.getElementById('setFixedMode');
+    const setRandomModeBtn = document.getElementById('setRandomMode');
+    const fixedModePanel = document.getElementById('fixedModePanel');
+    const randomModePanel = document.getElementById('randomModePanel');
+    const randomTotalInput = document.getElementById('randomTotal');
+    const randomMinInput = document.getElementById('randomMin');
+    const randomMaxInput = document.getElementById('randomMax');
+    const applyRandomAmountBtn = document.getElementById('applyRandomAmountBtn');
     const csvUpload = document.getElementById('csvUpload');
     const recipientCountEl = document.getElementById('recipientCount');
     const totalAmountEl = document.getElementById('totalAmount');
@@ -1057,6 +1067,88 @@ function initializeApp() {
         // Visual feedback
         applyBulkAmountBtn.classList.add('bg-green-600');
         setTimeout(() => applyBulkAmountBtn.classList.remove('bg-green-600'), 1000);
+    });
+
+    // --- Distribution Mode Switching ---
+    setFixedModeBtn.addEventListener('click', () => {
+        fixedModePanel.classList.remove('hidden');
+        randomModePanel.classList.add('hidden');
+        setFixedModeBtn.className = 'text-[10px] font-bold px-3 py-1 rounded-md transition-all bg-white text-purple-600 shadow-sm';
+        setRandomModeBtn.className = 'text-[10px] font-bold px-3 py-1 rounded-md transition-all text-gray-500 hover:text-gray-700';
+    });
+
+    setRandomModeBtn.addEventListener('click', () => {
+        randomModePanel.classList.remove('hidden');
+        fixedModePanel.classList.add('hidden');
+        setRandomModeBtn.className = 'text-[10px] font-bold px-3 py-1 rounded-md transition-all bg-white text-purple-600 shadow-sm';
+        setFixedModeBtn.className = 'text-[10px] font-bold px-3 py-1 rounded-md transition-all text-gray-500 hover:text-gray-700';
+    });
+
+    // --- Random Distribution Logic ---
+    applyRandomAmountBtn.addEventListener('click', () => {
+        const totalBudget = parseFloat(randomTotalInput.value);
+        const minVal = parseFloat(randomMinInput.value);
+        const maxVal = parseFloat(randomMaxInput.value);
+
+        if (isNaN(totalBudget) || totalBudget <= 0) return showNotification('Please enter a valid total budget.', 'error');
+        if (isNaN(minVal) || minVal < 0) return showNotification('Please enter a valid min amount.', 'error');
+        if (isNaN(maxVal) || maxVal <= minVal) return showNotification('Max must be greater than min.', 'error');
+
+        const lines = recipientsTextarea.value.split('\n');
+        const addresses = [];
+        lines.forEach(line => {
+            const firstPart = line.trim().split(/[\s,]+/)[0];
+            if (firstPart && firstPart.startsWith('0x') && firstPart.length >= 40) {
+                addresses.push(firstPart);
+            }
+        });
+
+        if (addresses.length === 0) return showNotification('No addresses found. Please paste addresses first.', 'error');
+
+        // Check if minimum distribution is even possible
+        if (addresses.length * minVal > totalBudget) {
+            return showNotification(`Insufficient budget! Giving ${minVal} to ${addresses.length} wallets requires ${addresses.length * minVal}.`, 'error');
+        }
+
+        let runningTotal = 0;
+        const updatedLines = [];
+        const decimals = state.tokenInfo.decimals || 18;
+        const step = 1 / Math.pow(10, Math.min(decimals, 6)); // Smallest possible increment
+
+        for (let i = 0; i < addresses.length; i++) {
+            const remainingWallets = addresses.length - i;
+            const remainingBudget = totalBudget - runningTotal;
+
+            // Calculate a safe range for this wallet to ensure we can still give 'min' to others
+            const safeMax = Math.min(maxVal, remainingBudget - ((remainingWallets - 1) * minVal));
+            const safeMin = minVal;
+
+            let amt;
+            if (safeMax <= safeMin) {
+                amt = safeMin;
+            } else {
+                amt = Math.random() * (safeMax - safeMin) + safeMin;
+            }
+
+            // Round to sensible decimals to avoid float issues
+            amt = Math.floor(amt * Math.pow(10, 6)) / Math.pow(10, 6);
+
+            // Final safety check
+            if (runningTotal + amt > totalBudget && i === addresses.length - 1) {
+                amt = Math.max(0, totalBudget - runningTotal);
+            }
+
+            updatedLines.push(`${addresses[i]}, ${amt}`);
+            runningTotal += amt;
+        }
+
+        recipientsTextarea.value = updatedLines.join('\n');
+        parseAndValidateData(recipientsTextarea.value, 'text');
+        showNotification(`Generated random distribution. Total used: ${runningTotal.toFixed(4)} ${state.tokenInfo.symbol}`, 'success');
+
+        // Visual feedback
+        applyRandomAmountBtn.classList.add('bg-green-600');
+        setTimeout(() => applyRandomAmountBtn.classList.remove('bg-green-600'), 1000);
     });
 
     csvUpload.addEventListener('change', (event) => {
