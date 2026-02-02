@@ -573,7 +573,13 @@ function initializeApp() {
                     );
                 } catch (estimateError) {
                     console.error('Gas estimation failed:', estimateError);
-                    // Fallback with manual gas limit
+
+                    // If the user rejected the estimation, don't try the fallback
+                    if (estimateError.code === 'ACTION_REJECTED') {
+                        throw estimateError;
+                    }
+
+                    // Fallback with manual gas limit for other errors
                     const fallbackGasLimit = 200000n + (BigInt(recipients.length) * 50000n);
                     tx = await batchContract.disperseEther(
                         recipientAddresses,
@@ -608,7 +614,13 @@ function initializeApp() {
                     );
                 } catch (estimateError) {
                     console.error('Gas estimation failed:', estimateError);
-                    // Fallback with manual gas limit
+
+                    // If the user rejected the estimation, don't try the fallback
+                    if (estimateError.code === 'ACTION_REJECTED') {
+                        throw estimateError;
+                    }
+
+                    // Fallback with manual gas limit for other errors
                     const fallbackGasLimit = 200000n + (BigInt(recipients.length) * 70000n);
                     tx = await batchContractWithSigner.disperseToken(
                         tokenInfo.address,
