@@ -53,6 +53,21 @@
     <meta name="farcaster:image" content="https://farsend.vercel.app/splash.png">
 
     <style>
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        *::-webkit-scrollbar {
+          display: none;
+        }
+
+        /* Hide scrollbar for IE, Edge and Firefox */
+        * {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+
+        /* Ensure body and html still allow scrolling */
+        html, body {
+          overflow: auto;
+        }
         :root {
             --fc-primary: linear-gradient(90deg, #6A3CFF, #A26BFF);
             --fc-primary-hover: linear-gradient(90deg, #582FD6, #8B5CF6);
