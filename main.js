@@ -4,7 +4,22 @@ import confetti from 'canvas-confetti';
 import { createAppKit } from '@reown/appkit';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { mainnet, base, optimism, arbitrum, bsc, avalanche, polygon } from '@reown/appkit/networks';
+import { defineChain } from '@reown/appkit/networks';
 import { sdk } from '@farcaster/miniapp-sdk';
+
+const litvmLiteForge = defineChain({
+  id: 4441,
+  caipNetworkId: 'eip155:4441',
+  chainNamespace: 'eip155',
+  name: 'LitVM LiteForge',
+  nativeCurrency: { name: 'zkLTC', symbol: 'zkLTC', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://liteforge.rpc.caldera.xyz/http'] }
+  },
+  blockExplorers: {
+    default: { name: 'LiteForge Explorer', url: 'https://liteforge.explorer.caldera.xyz' }
+  }
+});
 
 // Initialize Farcaster SDK
 sdk.actions.ready({ disableNativeGestures: true });
@@ -19,7 +34,7 @@ let appKit;
     try {
         appKit = await createAppKit({
             projectId: '0c80bc29a555c719ed2410c54b52a16d',
-            networks: [base, mainnet, optimism, arbitrum, bsc, avalanche, polygon],
+            networks: [base, mainnet, optimism, arbitrum, bsc, avalanche, polygon, litvmLiteForge],
             adapters: [new EthersAdapter()],
             metadata: {
                 name: 'FarSend',
