@@ -97,7 +97,21 @@
         "decimals": 18
       },
       "contractAddress": "0x9EEf8a9117272c1b5c4A4181f888000637317ea8"
-    }
+    },
+    "4441": {
+  "name": "LitVM LiteForge",
+  "shortName": "litvm-liteforge",
+  "chainId": 4441,
+  "chainIdHex": "0x1159",
+  "rpcUrl": "https://liteforge.rpc.caldera.xyz/http",
+  "explorerUrl": "https://liteforge.explorer.caldera.xyz/",
+  "nativeCurrency": {
+    "name": "zkLTC",
+    "symbol": "zkLTC",
+    "decimals": 18
+  },
+  "contractAddress": "0xeb0EB0986AC42831F62856a0E90a6B9B0A4fe492"
+}
   },
   "abi": [
     {
