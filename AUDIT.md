@@ -10,6 +10,8 @@
 
 The items marked **✅ FIXED** below were addressed after the initial review. The batch-sender contract source is now published at `BatchSender.sol` and has been reviewed (see the contract section below). A new **burn/dead-address safety option** was added to the UI, and several safety fixes were shipped.
 
+> **This document is actively maintained.** For the complementary **principal-software-architect review** (layering, maintainability, single-source-of-truth, testing/CI, resilience), see **[`ARCHITECTURE.md`](ARCHITECTURE.md)**.
+
 ---
 
 ## Verdict in one line

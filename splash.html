@@ -321,8 +321,41 @@
             font-size: 14px;
             color: var(--color-gray-200);
             opacity: 0.7;
-            margin-bottom: 32px;
+            margin-bottom: 20px;
             animation: slideUp 0.8s ease-out 0.5s both;
+        }
+
+        /* Premium icon chips */
+        .tagline-icons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 32px;
+            animation: slideUp 0.8s ease-out 0.6s both;
+        }
+
+        .icon-chip {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: rgba(50, 184, 198, 0.12);
+            border: 1px solid rgba(50, 184, 198, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-farcaster-purple);
+            backdrop-filter: blur(4px);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .icon-chip svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .icon-chip:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(50, 184, 198, 0.25);
         }
 
         @keyframes slideUp {
@@ -448,7 +481,24 @@
 
         <!-- Branding -->
         <h1 class="brand-name">FarSend</h1>
-        <p class="brand-tagline">Private Batch Sender for ETH and ERC-20 🔒⚡</p>
+        <p class="brand-tagline">Private Batch Sender for ETH and ERC-20</p>
+
+        <!-- Premium icon chips (replaces emoji) -->
+        <div class="tagline-icons" aria-hidden="true">
+            <span class="icon-chip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <path d="m9 12 2 2 4-4" />
+                </svg>
+            </span>
+            <span class="icon-chip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" />
+                </svg>
+            </span>
+        </div>
 
         <!-- Loading indicator -->
         <div class="loading-dots">

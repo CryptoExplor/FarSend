@@ -168,6 +168,34 @@
         #stepIndicator .flex-1.h-0\.5.bg-gray-200.mt-4.mx-2 {
             background: var(--fc-primary);
         }
+        /* Section header with icon chip */
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-title .section-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--fc-light-bg);
+            color: #6A3CFF;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .section-title .section-icon svg {
+            width: 15px;
+            height: 15px;
+        }
+
+        /* Burn checkbox accent */
+        .burn-check:checked {
+            accent-color: #dc2626;
+        }
     </style>
 </head>
 
@@ -221,7 +249,17 @@
             <!-- Chain Selector -->
             <div class="flex flex-col space-y-3 py-2">
                 <div class="flex justify-between items-center">
-                    <h2 class="text-lg font-semibold text-gray-800">Network</h2>
+                    <h2 class="text-lg font-semibold text-gray-800 section-title">
+                        <span class="section-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M2 12h20" />
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                        </span>
+                        Network
+                    </h2>
                     <div class="relative">
                         <select id="chainSelector"
                             class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-48 p-2.5 input-focus outline-none transition duration-150 appearance-none">
@@ -229,7 +267,8 @@
                         </select>
                         <div
                             class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                            <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                                aria-hidden="true" focusable="false">
                                 <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                             </svg>
                         </div>
@@ -241,11 +280,21 @@
             <div class="flex flex-col space-y-3 py-2">
                 <!-- Wallet Button -->
                 <div class="flex justify-between items-center">
-                    <h2 class="text-lg font-semibold text-gray-800">Wallet</h2>
+                    <h2 class="text-lg font-semibold text-gray-800 section-title">
+                        <span class="section-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+                                <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+                                <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+                            </svg>
+                        </span>
+                        Wallet
+                    </h2>
                     <button id="connectWalletBtn"
                         class="w-48 btn-primary font-semibold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center space-x-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg">
+                            xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z">
                             </path>
@@ -262,7 +311,18 @@
 
                 <!-- Step 2: Token & Recipients -->
                 <div>
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Define Token & Recipients</h2>
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4 section-title">
+                        <span class="section-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="8" cy="8" r="6" />
+                                <path d="M18.09 10.37A6 6 0 1 1 10.34 18" />
+                                <path d="M7 6h1v4" />
+                                <path d="m16.71 13.88.7.71-2.82 2.82" />
+                            </svg>
+                        </span>
+                        Define Token & Recipients
+                    </h2>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -379,7 +439,7 @@
                 <div id="approvalSection" class="p-4 bg-yellow-50 rounded-lg border border-yellow-200 hidden">
                     <p class="text-sm text-yellow-800 mb-3 font-semibold flex items-center">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg">
+                            xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
                             </path>
@@ -395,7 +455,16 @@
 
                 <!-- Step 3: Summary & Dispatch -->
                 <div id="dispatchSection">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-3">Review & Dispatch</h2>
+                    <h2 class="text-lg font-semibold text-gray-800 mb-3 section-title">
+                        <span class="section-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 2 11 13" />
+                                <path d="M22 2 15 22l-4-9-9-4Z" />
+                            </svg>
+                        </span>
+                        Review & Dispatch
+                    </h2>
                     <!-- Summary Card -->
                     <div class="bg-gray-50 rounded-lg p-4 space-y-3 text-sm border border-gray-200">
                         <div class="flex justify-between items-center">
@@ -420,7 +489,7 @@
                     <div id="burnWarningSection" class="p-4 bg-red-50 rounded-lg border border-red-200 hidden">
                         <p class="text-sm text-red-800 mb-2 font-semibold flex items-center">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                                xmlns="http://www.w3.org/2000/svg">
+                                xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
                                 </path>
@@ -434,7 +503,7 @@
                         </p>
                         <label class="flex items-start mt-3 cursor-pointer">
                             <input type="checkbox" id="burnConfirmCheckbox"
-                                class="mt-0.5 w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500">
+                                class="burn-check mt-0.5 w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500">
                             <span class="ml-2 text-sm text-red-800">I understand these funds will be burned and cannot
                                 be recovered. Allow sending to the burn/dead address(es).</span>
                         </label>
@@ -444,7 +513,7 @@
                     <button id="dispatchBtn" disabled
                         class="w-full mt-6 btn-primary font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-[1.01] duration-300 flex items-center justify-center space-x-3">
                         <svg id="shieldIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg">
+                            xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 20.944A12.02 12.02 0 0012 22a12.02 12.02 0 009-1.056h.001c.34.34.71.656 1.088.943l.044.032c.29.213.636.35.995.396V20.944c0-2.042-.393-4.005-1.12-5.786z">
                             </path>
@@ -467,8 +536,9 @@
         </footer>
     </div>
 
-    <!-- Notification Area -->
-    <div id="notification" class="p-4 rounded-lg text-sm main-card shadow-lg" style="border: 1px solid #A98EFF;"></div>
+    <!-- Notification Area (live region for screen readers) -->
+    <div id="notification" class="p-3 rounded-xl text-sm main-card shadow-lg" role="status" aria-live="polite"
+        style="border: 1px solid #A98EFF; box-shadow: 0 10px 40px rgba(15,23,42,0.18);"></div>
 
     <!-- Load main app script -->
     <script type="module" src="/main.js"></script>

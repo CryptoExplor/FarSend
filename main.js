@@ -277,24 +277,33 @@ function initializeApp() {
         return null;
     }
 
-    function showNotification(message, type = 'success') {
-        const icons = { success: '✅', error: '❌', info: '💡' };
-        notification.innerHTML = `${icons[type] || ''} ${message}`;
-        notification.className = 'p-4 rounded-lg text-sm main-card shadow-lg show';
+    // Premium SVG icon set (replaces emoji). Decorative: aria-hidden + focusable=false.
+    const NOTIFICATION_ICONS = {
+        success: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>`,
+        error: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`,
+        info: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`
+    };
 
-        if (type === 'success') {
-            notification.style.backgroundColor = '#d1fae5';
-            notification.style.color = '#065f46';
-            notification.style.border = '1px solid #34d399';
-        } else if (type === 'error') {
-            notification.style.backgroundColor = '#fee2e2';
-            notification.style.color = '#991b1b';
-            notification.style.border = '1px solid #f87171';
-        } else {
-            notification.style.backgroundColor = '#DBEAFE';
-            notification.style.color = '#1E40AF';
-            notification.style.border = '1px solid #93C5FD';
-        }
+    const NOTIFICATION_STYLES = {
+        success: { bg: '#ecfdf5', fg: '#065f46', border: '#34d399', iconBg: 'rgba(16,185,129,0.14)' },
+        error: { bg: '#fef2f2', fg: '#991b1b', border: '#f87171', iconBg: 'rgba(239,68,68,0.14)' },
+        info: { bg: '#eff6ff', fg: '#1E40AF', border: '#93C5FD', iconBg: 'rgba(59,130,246,0.14)' }
+    };
+
+    function showNotification(message, type = 'success') {
+        const s = NOTIFICATION_STYLES[type] || NOTIFICATION_STYLES.info;
+        notification.innerHTML = `
+            <div class="flex items-start gap-3">
+                <span class="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
+                    style="background:${s.iconBg}; color:${s.fg};">
+                    ${NOTIFICATION_ICONS[type] || NOTIFICATION_ICONS.info}
+                </span>
+                <div class="flex-1 min-w-0 text-sm leading-snug">${message}</div>
+            </div>`;
+        notification.className = 'p-3 rounded-xl main-card shadow-lg show';
+        notification.style.backgroundColor = s.bg;
+        notification.style.color = s.fg;
+        notification.style.border = `1px solid ${s.border}`;
         setTimeout(() => notification.classList.remove('show'), 8000);
     }
 
@@ -306,6 +315,9 @@ function initializeApp() {
             { id: 'stepCircle3', labelId: 'stepLabel3', label: 'Dispatch' }
         ];
 
+        // Checkmark shown on completed steps (premium touch, decorative).
+        const CHECK_SVG = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>';
+
         steps.forEach((s, index) => {
             const stepEl = document.getElementById(s.id);
             const labelEl = document.getElementById(s.labelId);
@@ -314,6 +326,9 @@ function initializeApp() {
 
             stepEl.className = 'w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300';
             labelEl.className = 'text-xs mt-2 text-center transition-colors duration-300';
+
+            // Completed steps display a check; active/pending display the step number.
+            stepEl.innerHTML = isCompleted ? CHECK_SVG : `<span class="font-bold">${index + 1}</span>`;
 
             if (isActive) {
                 stepEl.style.backgroundColor = '#6A3CFF';
@@ -706,7 +721,7 @@ function initializeApp() {
                                 state.currentChain?.explorerUrl?.includes('bscscan') ? 'BscScan' :
                                     state.currentChain?.explorerUrl?.includes('snowtrace') ? 'Snowtrace' :
                                         state.currentChain?.explorerUrl?.includes('polygonscan') ? 'PolygonScan' : 'Explorer';
-                const message = `✅ Success! Batch of ${recipients.length} transfers confirmed.<br>
+                const message = `Batch of ${recipients.length} transfers confirmed.<br>
                                 <a href="${explorerUrl}/tx/${receipt.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on ${explorerName}</a>`;
                 showNotification(message, 'success');
 
