@@ -21,6 +21,8 @@ FarSend is a web-based batch sender that enables users to send ETH and ERC-20 to
 
 ### 🔗 Wallet Integration
 - Connect with any Web3 wallet via Reown AppKit
+- **Base Account (smart wallet)** — dedicated "Sign in with Base Account" button; Base Account is featured first in the wallet modal (passkey, ERC-4337)
+- **EIP-5792 wallet_sendCalls** — when a Base Account (or other smart wallet) is connected, batch dispatch runs through `wallet_sendCalls` for atomic, bundler-handled gas; falls back to standard `signer.sendTransaction` for EOA wallets
 - Non-custodial — your keys never leave your wallet
 - Direct wallet-to-wallet transfers
 - Automatic network detection and switching to Base
@@ -75,6 +77,7 @@ FarSend is a web-based batch sender that enables users to send ETH and ERC-20 to
 - **Frontend**: Vanilla HTML/CSS/JavaScript with Tailwind CSS
 - **Web3 Library**: Ethers.js v6
 - **Wallet Connection**: Reown AppKit (formerly WalletConnect)
+- **Smart Wallet**: Base Account (passkey ERC-4337) — featured via Reown `featuredWalletIds`; dispatch via EIP-5792 `wallet_sendCalls` with signer fallback
 - **Blockchain**: Base (Ethereum L2) - Chain ID 8453
 - **Smart Contract**: Custom BaseBatchSender for gas-optimized batch transfers
 - **Social Layer**: Farcaster Mini App SDK

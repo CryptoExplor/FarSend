@@ -125,6 +125,17 @@ FarSend is a **single-page static dApp**: no backend, no build-time config, all 
    - Reown AppKit + networks are now a dynamic `import()` booted via `requestIdleCallback` after first paint (fallback: short timeout). Main bundle dropped to ~36KB; the ~1.25MB Reown chunk is code-split and only fetched/parsed when needed. `handleConnect` awaits `ensureAppKit()` so a fast click still works.
 9. ⏸️ Skipped by request — the dead `webhookUrl` in `farcaster.json` was intentionally not addressed (user asked to skip #9).
 
+## Base Account integration (Base App / smart wallet)
+
+FarSend now works with **Base Account** — the passkey-secured ERC-4337 smart wallet powering the Base App:
+
+- **Featured in the wallet modal:** AppKit config sets `featuredWalletIds: [BASE_ACCOUNT_WALLET_ID]` (the official Base Account wallet ID) so it appears first, alongside all other wallets (`allWallets: 'SHOW'`). It connects through the same ethers adapter.
+- **Dedicated "Sign in with Base Account" button** in the Wallet section (`baseAccountBtn` + `handleBaseAccountConnect`).
+- **EIP-5792 native dispatch:** `src/core/sendCalls.js` implements `wallet_getCapabilities` detection + `wallet_sendCalls` (atomic batch) + `wallet_getCallsStatus` polling. In `handleDispatch`, when the connected provider advertises the capability (smart wallets), the batch is submitted via `wallet_sendCalls` — letting the wallet bundle and (where sponsored) handle gas. Otherwise it falls back to the existing `signer.sendTransaction` path (EOA wallets). User rejections are always surfaced.
+- **Unit tested:** 11 new tests in `test/sendCalls.test.js` (capability detection, call shaping, submission, status polling/timeout). Suite is now 61 tests.
+
+**Trade-off / note:** gas *sponsorship* for Base Account requires app registration (Base Gasless campaign / paymaster) and is not hardcoded; the SDK path lets a connected smart wallet apply its own gas policies. To add guaranteed sponsored gas later, register the app and pass a `capabilities.paymasterService` on `wallet_sendCalls`.
+
 ---
 
 ## 5. Bottom line

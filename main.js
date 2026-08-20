@@ -12,6 +12,7 @@ import { extractAddresses, applyFixedAmount, generateRandomDistribution } from '
 import { debounce } from './src/core/debounce.js';
 import { describeError } from './src/core/errors.js';
 import { createFallbackProvider, readWithFallback } from './src/core/rpc.js';
+import { supportsSendCalls, sendCalls, waitForSendCalls } from './src/core/sendCalls.js';
 
 // Initialize Farcaster SDK
 sdk.actions.ready({ disableNativeGestures: true });
@@ -58,6 +59,10 @@ async function ensureAppKit() {
                 icons: ['https://farsend.vercel.app/icon.png']
             },
             defaultNetwork: base,
+            // Feature Base Account (the smart wallet behind the Base App) so it
+            // appears first in the wallet modal, while keeping all other wallets.
+            featuredWalletIds: [BASE_ACCOUNT_WALLET_ID],
+            allWallets: 'SHOW',
             features: { socials: false, email: false },
             themeMode: 'dark'
         });
@@ -80,6 +85,17 @@ async function bootApp() {
         document.getElementById('connectWalletBtn').innerHTML = '<span style="color: red;">Error: Failed to load wallet connector. Please refresh.</span>';
     }
 }
+
+// Base Account (the passkey ERC-4337 smart wallet powering the Base App) is a
+// registered Reown wallet. Featuring its wallet ID surfaces it first in the
+// AppKit modal; it connects through the same ethers adapter, so the batch-send
+// flow (disperseEther/disperseToken via signer.sendTransaction) works unchanged.
+export const BASE_ACCOUNT_WALLET_ID =
+    'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa';
+
+// Comma-separated fallback public RPCs per chain (see src/core/rpc.js).
+// NOTE: keep EXPECTED_CHAIN_IDS in scripts/check-chains.mjs in sync if you add
+// networks here — see the drift guard there.
 
 // Defer the heavy chunk until after first paint (idle time).
 if (typeof window.requestIdleCallback === 'function') {
@@ -140,6 +156,7 @@ function initializeApp() {
 
     // --- DOM Elements ---
     const connectWalletBtn = document.getElementById('connectWalletBtn');
+    const baseAccountBtn = document.getElementById('baseAccountBtn');
     const appContent = document.getElementById('app-content');
     const chainSelector = document.getElementById('chainSelector');
     chainSelector.disabled = true; // Disabled until wallet connects
@@ -449,6 +466,36 @@ function initializeApp() {
         }
     }
 
+    // Sign in with Base Account. Base Account is already featured in the AppKit
+    // modal via featuredWalletIds, so opening the connect view surfaces it first.
+    // If the wallet is already connected this simply opens the modal to switch
+    // accounts/wallets.
+    async function handleBaseAccountConnect() {
+        baseAccountBtn.disabled = true;
+        baseAccountBtn.innerHTML = `<span class="animate-pulse text-[#0052FF] font-bold">Connecting with Base...</span>`;
+
+        try {
+            await ensureAppKit();
+            await window.appKit.open({ view: 'Connect', namespace: 'eip155' });
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            if (state.isWalletConnected && state.walletAddress) {
+                const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
+                showNotification(`Connected with Base Account: ${truncatedAddress}`, 'success');
+            }
+        } catch (error) {
+            console.error('Base Account connection error:', error);
+            showNotification(`Base Account connection failed: ${describeError(error, { action: 'connection', fallback: 'please try again.' })}`, 'error');
+        } finally {
+            baseAccountBtn.innerHTML = `
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+                    <path d="M12 2a8.6 8.6 0 0 1 8.6 8.6c0 .6-.1 1.2-.3 1.8l.7 3.4a1.5 1.5 0 0 1-1.5 1.8H14.9a5.4 5.4 0 0 1-5.3-4.3 2.9 2.9 0 0 1 2.8-3.6 2.8 2.8 0 0 1 2.8 2.9 2.9 2.9 0 0 1-.4 1.5l4.2-1.6a8.6 8.6 0 0 0-7-7.3L12 2zm0 20c-2 0-3.6-.6-4.7-1.7L3 20l.3-4.3A8.6 8.6 0 0 1 12 22zm-2.4-11.5A4.6 4.6 0 0 0 12 6.5a4.6 4.6 0 0 0 2.4 4c-.8-.6-1.3-1.4-1.5-2.3-.2.9-.7 1.7-1.5 2.3z" />
+                </svg>
+                <span>Sign in with Base Account</span>`;
+            baseAccountBtn.disabled = false;
+        }
+    }
+
     async function readTokenMetadata(address, provider) {
         const c = new ethers.Contract(address, ERC20_ABI, provider);
         const [symbol, decimals] = await Promise.all([c.symbol(), c.decimals()]);
@@ -686,82 +733,142 @@ function initializeApp() {
 
             dispatchBtnText.textContent = 'Requesting transaction signature...';
             let tx;
+            let txHash = null;
+            let usedSmartWallet = false;
             const recipientAddresses = recipients.map(r => r.address);
             const explorerUrl = state.currentChain?.explorerUrl || 'https://etherscan.io';
 
-            // CRITICAL FIX: Add explicit gas estimation and limits for Farcaster Wallet
-            if (token === 'ETH') {
-                const totalValue = totalAmountBN;
+            // Build the contract call so it can be dispatched either via the smart
+            // wallet's wallet_sendCalls (EIP-5792, e.g. Base Account) or via a
+            // regular signer.sendTransaction (EOA wallets). Same gas-optimized
+            // BatchSender call either way.
+            const iface = new ethers.Interface(CONTRACT_ABI);
+            const contractAddress = state.currentChain.contractAddress;
+            const chainIdHex = state.currentChain.chainIdHex ||
+                `0x${state.currentChain.chainId.toString(16)}`;
+            const callData = token === 'ETH'
+                ? iface.encodeFunctionData('disperseEther', [recipientAddresses, amounts])
+                : iface.encodeFunctionData('disperseToken', [tokenInfo.address, recipientAddresses, amounts]);
 
+            // Prefer the EIP-5792 smart-wallet path when available (Base Account,
+            // other ERC-4337 wallets). It lets the wallet bundle/sponsor the batch
+            // atomically and handles gas estimation internally.
+            if (state.eip1193Provider) {
                 try {
-                    // Estimate gas first
-                    const gasEstimate = await batchContract.disperseEther.estimateGas(
-                        recipientAddresses,
-                        amounts,
-                        { value: totalValue }
-                    );
-
-                    // Add 30% buffer for Farcaster Wallet
-                    const gasLimit = gasEstimate + (gasEstimate * 30n / 100n);
-
-                    tx = await batchContract.disperseEther(
-                        recipientAddresses,
-                        amounts,
-                        {
-                            value: totalValue,
-                            gasLimit: gasLimit
+                    if (await supportsSendCalls(state.eip1193Provider, chainIdHex)) {
+                        usedSmartWallet = true;
+                        dispatchBtnText.textContent = 'Confirm in your smart wallet...';
+                        const batchId = await sendCalls({
+                            provider: state.eip1193Provider,
+                            from: walletAddress,
+                            chainIdHex,
+                            calls: [{ to: contractAddress, value: totalAmountBN, data: callData }]
+                        });
+                        showNotification(`Batch submitted (id ${batchId}). Waiting for confirmation...`, 'info');
+                        const result = await waitForSendCalls({
+                            provider: state.eip1193Provider,
+                            batchId
+                        });
+                        if (result.status === 'CONFIRMED') {
+                            txHash = result.txHashes?.[0] || null;
+                        } else if (result.status === 'CANCELLED') {
+                            throw Object.assign(new Error('Transaction rejected by user.'), { code: 4001 });
+                        } else {
+                            throw new Error('Transaction failed on chain. Please check the explorer for details.');
                         }
-                    );
-                } catch (estimateError) {
-                    console.error('Gas estimation failed:', estimateError);
-
-                    // Never broadcast with a manual gas limit: if estimation failed the
-                    // call would likely revert, and broadcasting it would burn the user's
-                    // gas (and move the ETH out and back minus fees). Fail safely instead.
-                    if (estimateError.code === 'ACTION_REJECTED') {
-                        throw estimateError;
                     }
-                    throw new Error(`Gas estimation failed — the transaction would likely revert. ${estimateError.reason || estimateError.message}`);
-                }
-            } else {
-                const batchContractWithSigner = batchContract.connect(signer);
-
-                try {
-                    // Estimate gas first
-                    const gasEstimate = await batchContractWithSigner.disperseToken.estimateGas(
-                        tokenInfo.address,
-                        recipientAddresses,
-                        amounts
-                    );
-
-                    // Add 30% buffer for Farcaster Wallet
-                    const gasLimit = gasEstimate + (gasEstimate * 30n / 100n);
-
-                    tx = await batchContractWithSigner.disperseToken(
-                        tokenInfo.address,
-                        recipientAddresses,
-                        amounts,
-                        {
-                            gasLimit: gasLimit
-                        }
-                    );
-                } catch (estimateError) {
-                    console.error('Gas estimation failed:', estimateError);
-
-                    // Never broadcast with a manual gas limit: if estimation failed the
-                    // call would likely revert, and broadcasting it would burn the user's gas.
-                    if (estimateError.code === 'ACTION_REJECTED') {
-                        throw estimateError;
-                    }
-                    throw new Error(`Gas estimation failed — the transaction would likely revert. ${estimateError.reason || estimateError.message}`);
+                } catch (scError) {
+                    // User rejections are always surfaced. Any other failure falls
+                    // back to the standard signer path so EOA-style wallets still work.
+                    if (scError?.code === 'ACTION_REJECTED' || scError?.code === 4001) throw scError;
+                    console.warn('wallet_sendCalls path failed, falling back to standard path:', scError);
+                    usedSmartWallet = false;
+                    txHash = null;
                 }
             }
 
-            showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${explorerUrl}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
+            // Standard signer path (EOA wallets and smart-wallet fallback).
+            if (!usedSmartWallet) {
+                if (token === 'ETH') {
+                    const totalValue = totalAmountBN;
 
-            const receipt = await tx.wait();
+                    try {
+                        // Estimate gas first
+                        const gasEstimate = await batchContract.disperseEther.estimateGas(
+                            recipientAddresses,
+                            amounts,
+                            { value: totalValue }
+                        );
 
-            if (receipt.status === 1) {
+                        // Add 30% buffer for Farcaster Wallet
+                        const gasLimit = gasEstimate + (gasEstimate * 30n / 100n);
+
+                        tx = await batchContract.disperseEther(
+                            recipientAddresses,
+                            amounts,
+                            {
+                                value: totalValue,
+                                gasLimit: gasLimit
+                            }
+                        );
+                    } catch (estimateError) {
+                        console.error('Gas estimation failed:', estimateError);
+
+                        // Never broadcast with a manual gas limit: if estimation failed the
+                        // call would likely revert, and broadcasting it would burn the user's
+                        // gas (and move the ETH out and back minus fees). Fail safely instead.
+                        if (estimateError.code === 'ACTION_REJECTED') {
+                            throw estimateError;
+                        }
+                        throw new Error(`Gas estimation failed — the transaction would likely revert. ${estimateError.reason || estimateError.message}`);
+                    }
+                } else {
+                    const batchContractWithSigner = batchContract.connect(signer);
+
+                    try {
+                        // Estimate gas first
+                        const gasEstimate = await batchContractWithSigner.disperseToken.estimateGas(
+                            tokenInfo.address,
+                            recipientAddresses,
+                            amounts
+                        );
+
+                        // Add 30% buffer for Farcaster Wallet
+                        const gasLimit = gasEstimate + (gasEstimate * 30n / 100n);
+
+                        tx = await batchContractWithSigner.disperseToken(
+                            tokenInfo.address,
+                            recipientAddresses,
+                            amounts,
+                            {
+                                gasLimit: gasLimit
+                            }
+                        );
+                    } catch (estimateError) {
+                        console.error('Gas estimation failed:', estimateError);
+
+                        // Never broadcast with a manual gas limit: if estimation failed the
+                        // call would likely revert, and broadcasting it would burn the user's gas.
+                        if (estimateError.code === 'ACTION_REJECTED') {
+                            throw estimateError;
+                        }
+                        throw new Error(`Gas estimation failed — the transaction would likely revert. ${estimateError.reason || estimateError.message}`);
+                    }
+                }
+
+                showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${explorerUrl}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
+
+                const receipt = await tx.wait();
+
+                if (receipt.status === 1) {
+                    txHash = receipt.hash;
+                } else {
+                    throw new Error('Transaction reverted on chain. Please check the explorer for details.');
+                }
+            }
+
+            // Shared success handling (works for both dispatch paths).
+            if (txHash) {
                 const explorerName = state.currentChain?.explorerUrl?.includes('basescan') ? 'BaseScan' :
                     state.currentChain?.explorerUrl?.includes('etherscan') ? 'Etherscan' :
                         state.currentChain?.explorerUrl?.includes('optimistic') ? 'Optimistic Etherscan' :
@@ -770,7 +877,7 @@ function initializeApp() {
                                     state.currentChain?.explorerUrl?.includes('snowtrace') ? 'Snowtrace' :
                                         state.currentChain?.explorerUrl?.includes('polygonscan') ? 'PolygonScan' : 'Explorer';
                 const message = `Batch of ${recipients.length} transfers confirmed.<br>
-                                <a href="${explorerUrl}/tx/${receipt.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on ${explorerName}</a>`;
+                                <a href="${explorerUrl}/tx/${txHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on ${explorerName}</a>`;
                 showNotification(message, 'success');
 
                 if (window.confetti) {
@@ -779,9 +886,6 @@ function initializeApp() {
 
                 recipientsTextarea.value = '';
                 parseAndValidateData('', 'text');
-
-            } else {
-                throw new Error('Transaction reverted on chain. Please check BaseScan for details.');
             }
 
         } catch (error) {
@@ -1054,6 +1158,7 @@ function initializeApp() {
     });
 
     connectWalletBtn.addEventListener('click', handleConnectClick);
+    baseAccountBtn.addEventListener('click', handleBaseAccountConnect);
     approveBtn.addEventListener('click', handleApprove);
     dispatchBtn.addEventListener('click', handleDispatch);
 
