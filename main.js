@@ -1,10 +1,6 @@
 // Import dependencies
 import { ethers } from 'ethers';
 import confetti from 'canvas-confetti';
-import { createAppKit } from '@reown/appkit';
-import { EthersAdapter } from '@reown/appkit-adapter-ethers';
-import { mainnet, base, optimism, arbitrum, bsc, avalanche, polygon } from '@reown/appkit/networks';
-import { defineChain } from '@reown/appkit/networks';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { parseRecipients, validateRecipients } from './src/core/parse.js';
 import {
@@ -14,20 +10,8 @@ import {
 } from './src/core/validate.js';
 import { extractAddresses, applyFixedAmount, generateRandomDistribution } from './src/core/distribute.js';
 import { debounce } from './src/core/debounce.js';
-
-const litvmLiteForge = defineChain({
-  id: 4441,
-  caipNetworkId: 'eip155:4441',
-  chainNamespace: 'eip155',
-  name: 'LitVM LiteForge',
-  nativeCurrency: { name: 'zkLTC', symbol: 'zkLTC', decimals: 18 },
-  rpcUrls: {
-    default: { http: ['https://liteforge.rpc.caldera.xyz/http'] }
-  },
-  blockExplorers: {
-    default: { name: 'LiteForge Explorer', url: 'https://liteforge.explorer.caldera.xyz' }
-  }
-});
+import { describeError } from './src/core/errors.js';
+import { createFallbackProvider, readWithFallback } from './src/core/rpc.js';
 
 // Initialize Farcaster SDK
 sdk.actions.ready({ disableNativeGestures: true });
@@ -35,12 +19,35 @@ sdk.actions.ready({ disableNativeGestures: true });
 // Make confetti available globally
 window.confetti = confetti;
 
-// Initialize Reown AppKit
-let appKit;
+// --- Lazy AppKit bootstrap -----------------------------------------------
+// Reown AppKit + its networks are code-split (see vite.config manualChunks).
+// We dynamically import them only when needed and kick the boot off in idle
+// time after first paint, so the ~400KB-gzip Reown chunk does not block the
+// initial render. If the user clicks Connect first, handleConnect awaits this.
+let appKit = null;
+let appInitPromise = null;
 
-(async () => {
-    try {
-        appKit = await createAppKit({
+async function ensureAppKit() {
+    if (appInitPromise) return appInitPromise;
+    appInitPromise = (async () => {
+        const [{ createAppKit }, { EthersAdapter }, nets] = await Promise.all([
+            import('@reown/appkit'),
+            import('@reown/appkit-adapter-ethers'),
+            import('@reown/appkit/networks')
+        ]);
+
+        const { mainnet, base, optimism, arbitrum, bsc, avalanche, polygon, defineChain } = nets;
+        const litvmLiteForge = defineChain({
+            id: 4441,
+            caipNetworkId: 'eip155:4441',
+            chainNamespace: 'eip155',
+            name: 'LitVM LiteForge',
+            nativeCurrency: { name: 'zkLTC', symbol: 'zkLTC', decimals: 18 },
+            rpcUrls: { default: { http: ['https://liteforge.rpc.caldera.xyz/http'] } },
+            blockExplorers: { default: { name: 'LiteForge Explorer', url: 'https://liteforge.explorer.caldera.xyz' } }
+        });
+
+        const kit = await createAppKit({
             projectId: '0c80bc29a555c719ed2410c54b52a16d',
             networks: [base, mainnet, optimism, arbitrum, bsc, avalanche, polygon, litvmLiteForge],
             adapters: [new EthersAdapter()],
@@ -51,23 +58,35 @@ let appKit;
                 icons: ['https://farsend.vercel.app/icon.png']
             },
             defaultNetwork: base,
-            features: {
-                socials: false,
-                email: false
-            },
+            features: { socials: false, email: false },
             themeMode: 'dark'
         });
 
-        window.appKit = appKit;
+        appKit = kit;
+        window.appKit = kit;
         console.log('✅ Reown AppKit initialized successfully');
+        return kit;
+    })();
+    return appInitPromise;
+}
 
-        // Initialize the main app
+// Boot the app (initializeApp wires the provider subscriber + listeners).
+async function bootApp() {
+    try {
+        await ensureAppKit();
         initializeApp();
     } catch (error) {
         console.error('❌ Failed to initialize AppKit:', error);
         document.getElementById('connectWalletBtn').innerHTML = '<span style="color: red;">Error: Failed to load wallet connector. Please refresh.</span>';
     }
-})();
+}
+
+// Defer the heavy chunk until after first paint (idle time).
+if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => bootApp(), { timeout: 1500 });
+} else {
+    setTimeout(bootApp, 300);
+}
 
 function initializeApp() {
     // --- CONSTANTS & CONFIGURATION ---
@@ -237,6 +256,13 @@ function initializeApp() {
         }
     }
 
+    // Fallback read-only provider for the current chain (used when the wallet
+    // RPC is flaky). Signing never uses this.
+    function fallbackProvider() {
+        if (!state.currentChain) return null;
+        return createFallbackProvider(state.currentChain);
+    }
+
     function updateBurnWarning() {
         const burnRecipients = findBurnRecipients(state.recipients, BURN_ADDRESSES);
         if (burnRecipients.length > 0) {
@@ -250,35 +276,6 @@ function initializeApp() {
             burnConfirmCheckbox.checked = false;
             state.burnConfirmed = false;
         }
-    }
-
-    function decodeRevertReason(error) {
-        // Collect any revert data ethers may surface (top-level or nested).
-        const candidates = [];
-        if (error.data) candidates.push(error.data);
-        if (error.error?.data) candidates.push(error.error.data);
-
-        for (const raw of candidates) {
-            try {
-                const data = String(raw);
-                const hexData = data.startsWith('0x') ? data : '0x' + data;
-                const iface = new ethers.Interface(CONTRACT_ABI);
-
-                // Try to parse a custom/error object first.
-                const decoded = iface.parseError(hexData);
-                if (decoded) {
-                    return `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
-                }
-
-                // Fall back to decoding a standard Error("reason") revert string.
-                if (hexData.startsWith('0x08c379a0')) {
-                    return ethers.toUtf8String('0x' + hexData.slice(10));
-                }
-            } catch (e) {
-                // Not decodable; try the next candidate.
-            }
-        }
-        return null;
     }
 
     // Premium SVG icon set (replaces emoji). Decorative: aria-hidden + focusable=false.
@@ -366,6 +363,8 @@ function initializeApp() {
         connectWalletBtn.innerHTML = `<span class="animate-pulse text-purple-700 font-bold">Connecting...</span>`;
 
         try {
+            // Ensure the lazy-loaded AppKit is ready before opening the modal.
+            await ensureAppKit();
             await window.appKit.open({ view: 'Connect', namespace: 'eip155' });
 
             // Wait a bit for state to update via subscribeProviders
@@ -387,7 +386,7 @@ function initializeApp() {
             }
         } catch (error) {
             console.error('Connection error:', error);
-            showNotification(`Wallet connection failed: ${error.message.substring(0, 100)}`, 'error');
+            showNotification(`Wallet connection failed: ${describeError(error, { action: 'connection', fallback: 'please try again.' })}`, 'error');
 
             // Restore previous state if there was one
             if (wasConnected && previousAddress) {
@@ -450,22 +449,33 @@ function initializeApp() {
         }
     }
 
+    async function readTokenMetadata(address, provider) {
+        const c = new ethers.Contract(address, ERC20_ABI, provider);
+        const [symbol, decimals] = await Promise.all([c.symbol(), c.decimals()]);
+        return { symbol, decimals: Number(decimals) };
+    }
+
     async function validateERC20Address(address) {
         if (!state.provider) {
             showNotification('Please connect your wallet first.', 'error');
             return false;
         }
+        const fb = fallbackProvider();
         try {
+            const meta = await readWithFallback(
+                () => readTokenMetadata(address, state.provider),
+                () => readTokenMetadata(address, fb),
+                { fallbackProvider: fb }
+            );
+
+            // The contract stays bound to the wallet provider — only the metadata
+            // read may have used the fallback RPC; money ops still go through signer.
             const tokenContract = new ethers.Contract(address, ERC20_ABI, state.provider);
-            const [symbol, decimals] = await Promise.all([
-                tokenContract.symbol(),
-                tokenContract.decimals()
-            ]);
 
             state.tokenInfo = {
                 address: ethers.getAddress(address),
-                symbol: symbol,
-                decimals: Number(decimals),
+                symbol: meta.symbol,
+                decimals: meta.decimals,
                 contract: tokenContract,
                 allowance: 0n,
                 requiredAllowance: 0n,
@@ -500,7 +510,14 @@ function initializeApp() {
             }
         });
         const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
-        const allowance = await tokenContractWithSigner.allowance(state.walletAddress, state.currentChain?.contractAddress);
+
+        const contractAddress = state.currentChain?.contractAddress;
+        const fb = fallbackProvider();
+        const allowance = await readWithFallback(
+            () => tokenContractWithSigner.allowance(state.walletAddress, contractAddress),
+            () => state.tokenInfo.contract.connect(fb).allowance(state.walletAddress, contractAddress),
+            { fallbackProvider: fb }
+        );
 
         state.tokenInfo.allowance = allowance;
         state.tokenInfo.requiredAllowance = totalAmountBN;
@@ -533,7 +550,7 @@ function initializeApp() {
             return !a.needsApproval;
         } catch (error) {
             console.error('Approval check error:', error);
-            showNotification(`Failed to check token allowance: ${error.message || 'Unknown error'}`, 'error');
+            showNotification(`Failed to check token allowance: ${describeError(error, { action: 'allowance check' })}`, 'error');
             return false;
         }
     }
@@ -581,8 +598,7 @@ function initializeApp() {
 
         } catch (error) {
             console.error('Approval failed:', error);
-            const msg = error.code === 'ACTION_REJECTED' ? 'Approval rejected by user.' : `Approval failed: ${error.message.substring(0, 100)}`;
-            showNotification(msg, 'error');
+            showNotification(`Approval failed: ${describeError(error, { abi: CONTRACT_ABI, action: 'approval' })}`, 'error');
         } finally {
             approveBtn.disabled = false;
             const displayAmount = parseFloat(amountToDisplay).toFixed(state.tokenInfo.decimals > 4 ? 4 : state.tokenInfo.decimals);
@@ -617,8 +633,13 @@ function initializeApp() {
             });
             const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
 
+            const fb = fallbackProvider();
             if (token === 'ETH') {
-                const balance = await state.provider.getBalance(walletAddress);
+                const balance = await readWithFallback(
+                    () => state.provider.getBalance(walletAddress),
+                    () => fb.getBalance(walletAddress),
+                    { fallbackProvider: fb }
+                );
                 if (totalAmountBN > balance) {
                     const required = ethers.formatEther(totalAmountBN);
                     const available = ethers.formatEther(balance);
@@ -628,10 +649,20 @@ function initializeApp() {
                 if (!tokenInfo.contract) throw new Error('Token contract not initialized');
                 const tokenContractWithSigner = tokenInfo.contract.connect(signer);
                 const contractAddress = state.currentChain?.contractAddress;
-                const [balance, allowance] = await Promise.all([
-                    tokenContractWithSigner.balanceOf(walletAddress),
-                    tokenContractWithSigner.allowance(walletAddress, contractAddress)
-                ]);
+                const [balance, allowance] = await readWithFallback(
+                    () => Promise.all([
+                        tokenContractWithSigner.balanceOf(walletAddress),
+                        tokenContractWithSigner.allowance(walletAddress, contractAddress)
+                    ]),
+                    () => {
+                        const c = tokenInfo.contract.connect(fb);
+                        return Promise.all([
+                            c.balanceOf(walletAddress),
+                            c.allowance(walletAddress, contractAddress)
+                        ]);
+                    },
+                    { fallbackProvider: fb }
+                );
 
                 if (totalAmountBN > balance) {
                     const required = ethers.formatUnits(totalAmountBN, decimals);
@@ -755,15 +786,8 @@ function initializeApp() {
 
         } catch (error) {
             console.error('Dispatch error:', error);
-            let reason = error.message || 'Unknown error';
-            if (error.reason) {
-                reason = error.reason;
-            } else {
-                const decoded = decodeRevertReason(error);
-                if (decoded) reason = decoded;
-            }
-            const msg = error.code === 'ACTION_REJECTED' ? 'Transaction rejected by user.' : `Dispatch failed: ${reason}`;
-            showNotification(msg, 'error');
+            const reason = describeError(error, { abi: CONTRACT_ABI, action: 'transaction' });
+            showNotification(`Dispatch failed: ${reason}`, 'error');
         } finally {
             loadingSpinner.classList.add('hidden');
             dispatchBtnText.textContent = 'Dispatch Batch';
@@ -827,7 +851,7 @@ function initializeApp() {
                     } catch (e) {
                         if (gen !== summaryGeneration) return;
                         console.error('Approval check error:', e);
-                        showNotification(`Failed to check token allowance: ${e.message || 'Unknown error'}`, 'error');
+                        showNotification(`Failed to check token allowance: ${describeError(e, { action: 'allowance check' })}`, 'error');
                         isReady = false;
                     }
                 } else {

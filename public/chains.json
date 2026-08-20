@@ -12,7 +12,11 @@
         "symbol": "ETH",
         "decimals": 18
       },
-      "contractAddress": "0x8878b70a01bdda92ab8ea48dd7893b64c69298c0"
+      "contractAddress": "0x8878b70a01bdda92ab8ea48dd7893b64c69298c0",
+      "fallbackRpcUrls": [
+        "https://base-rpc.publicnode.com",
+        "https://mainnet.base.org"
+      ]
     },
     "1": {
       "name": "Ethereum",
@@ -26,7 +30,10 @@
         "symbol": "ETH",
         "decimals": 18
       },
-      "contractAddress": "0xF2168287245b647DEacA4562e4b80AC78868Ade5"
+      "contractAddress": "0xF2168287245b647DEacA4562e4b80AC78868Ade5",
+      "fallbackRpcUrls": [
+        "https://eth.llamarpc.com"
+      ]
     },
     "10": {
       "name": "Optimism",
@@ -40,7 +47,11 @@
         "symbol": "ETH",
         "decimals": 18
       },
-      "contractAddress": "0x8e33e8149756D5aA9E81763EAF82bA5702B6Ab50"
+      "contractAddress": "0x8e33e8149756D5aA9E81763EAF82bA5702B6Ab50",
+      "fallbackRpcUrls": [
+        "https://optimism.llamarpc.com",
+        "https://mainnet.optimism.io"
+      ]
     },
     "42161": {
       "name": "Arbitrum",
@@ -54,7 +65,11 @@
         "symbol": "ETH",
         "decimals": 18
       },
-      "contractAddress": "0xa3781e8cd25b5E7741E2903b24e5B7157938594d"
+      "contractAddress": "0xa3781e8cd25b5E7741E2903b24e5B7157938594d",
+      "fallbackRpcUrls": [
+        "https://arbitrum.llamarpc.com",
+        "https://arb1.arbitrum.io/rpc"
+      ]
     },
     "56": {
       "name": "BNB Smart Chain",
@@ -96,22 +111,26 @@
         "symbol": "MATIC",
         "decimals": 18
       },
-      "contractAddress": "0x9EEf8a9117272c1b5c4A4181f888000637317ea8"
+      "contractAddress": "0x9EEf8a9117272c1b5c4A4181f888000637317ea8",
+      "fallbackRpcUrls": [
+        "https://polygon.llamarpc.com",
+        "https://polygon-rpc.com"
+      ]
     },
     "4441": {
-  "name": "LitVM LiteForge",
-  "shortName": "litvm-liteforge",
-  "chainId": 4441,
-  "chainIdHex": "0x1159",
-  "rpcUrl": "https://liteforge.rpc.caldera.xyz/http",
-  "explorerUrl": "https://liteforge.explorer.caldera.xyz/",
-  "nativeCurrency": {
-    "name": "zkLTC",
-    "symbol": "zkLTC",
-    "decimals": 18
-  },
-  "contractAddress": "0xeb0EB0986AC42831F62856a0E90a6B9B0A4fe492"
-}
+      "name": "LitVM LiteForge",
+      "shortName": "litvm-liteforge",
+      "chainId": 4441,
+      "chainIdHex": "0x1159",
+      "rpcUrl": "https://liteforge.rpc.caldera.xyz/http",
+      "explorerUrl": "https://liteforge.explorer.caldera.xyz/",
+      "nativeCurrency": {
+        "name": "zkLTC",
+        "symbol": "zkLTC",
+        "decimals": 18
+      },
+      "contractAddress": "0xeb0EB0986AC42831F62856a0E90a6B9B0A4fe492"
+    }
   },
   "abi": [
     {

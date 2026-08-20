@@ -117,10 +117,13 @@ FarSend is a **single-page static dApp**: no backend, no build-time config, all 
    - `updateSummary()` now bumps a `summaryGeneration` token and abandons stale in-flight results (no interleaving races on `dispatchBtn`/stepper/approval UI).
    - ERC-20 allowance check split into `computeApproval()` (pure, no DOM) + `applyApprovalUI()` (guarded apply) + thin `checkAndPromptApproval()` for the dispatch path.
    - High-frequency inputs (recipient textarea, ERC-20 address) are debounced via `src/core/debounce.js` (300ms/250ms), cutting live RPC calls during typing.
-   - Added `debounce` unit tests (31 total now).
-7. Standardize error handling; add provider fallback.
-8. Lazy-load the Reown chunk; review bundle size.
-9. Remove or implement the dead `webhookUrl`; reconcile manifest static-file vs redirect.
+7. ✅ Standardize error handling + provider fallback (done):
+   - `src/core/errors.js` — `describeError()` centralizes user-facing messages (ACTION_REJECTED/4001 → "rejected by user", NETWORK_ERROR/SERVER_ERROR/TIMEOUT → "network request failed", revert-data decoded via `decodeRevertReason()` against the ABI). Refactored connect/approve/dispatch/approval-check error sites to use it.
+   - `src/core/rpc.js` — `getChainRpcUrls()`/`createFallbackProvider()`/`readWithFallback()`: read-only calls (token metadata, allowance, balance checks) fall back to a public RPC if the wallet's RPC is flaky. Signing never uses the fallback. Added `fallbackRpcUrls` to `chains.json` for Base/ETH/OP/Arbitrum/Polygon.
+   - Added `errors` + `rpc` unit tests (50 total now).
+8. ✅ Lazy-load the Reown chunk (done):
+   - Reown AppKit + networks are now a dynamic `import()` booted via `requestIdleCallback` after first paint (fallback: short timeout). Main bundle dropped to ~36KB; the ~1.25MB Reown chunk is code-split and only fetched/parsed when needed. `handleConnect` awaits `ensureAppKit()` so a fast click still works.
+9. ⏸️ Skipped by request — the dead `webhookUrl` in `farcaster.json` was intentionally not addressed (user asked to skip #9).
 
 ---
 
