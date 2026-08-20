@@ -101,12 +101,16 @@ FarSend is a **single-page static dApp**: no backend, no build-time config, all 
 
 **P0 (correctness/ops):**
 1. ✅ Fix `vercel.json` duplicate `redirects` key (done).
-2. Resolve the dual chain-config source of truth (single source + build-time drift check).
+2. ✅ Add build/CI-time chain-config drift guard — `scripts/check-chains.mjs` verifies `chains.json` shape, addresses, unique IDs, and that the chain set matches the AppKit networks imported in `main.js` (single-source-of-truth guard). Runs in CI and via `npm run check:chains`.
 
 **P1 (structure/quality):**
-3. Extract pure functions (`parse`, `validate`, `distribute`) into modules and add Vitest tests.
-4. Add CI: `npm ci` → `build` → `node --check` → `test`.
-5. Add a compiled-in contract-address canary / config integrity check.
+3. ✅ Extract pure functions into modules + Vitest tests (done):
+   - `src/core/parse.js` — `parseRecipients`, `validateRecipients`, `splitLine`
+   - `src/core/validate.js` — `isBurnAddress`, `findBurnRecipients`, `burnTotal`, `DEFAULT_BURN_ADDRESSES`
+   - `src/core/distribute.js` — `extractAddresses`, `applyFixedAmount`, `generateRandomDistribution`
+   - `test/{parse,validate,distribute}.test.js` — **28 passing tests**
+4. ✅ Add CI — `.github/workflows/ci.yml`: `npm ci` → `node --check` → `check:chains` → `npm test` → `npm run build`. (`package-lock.json` is now committed so `npm ci` is reproducible.)
+5. ⏳ Compiled-in contract-address canary / config integrity check — still open (the drift guard partially covers this; a boot-time canary that rejects a mismatched served config remains).
 
 **P2 (resilience/UX):**
 6. Debounce + generation-token the async summary/allowance path.

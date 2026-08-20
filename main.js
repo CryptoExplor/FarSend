@@ -6,6 +6,13 @@ import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { mainnet, base, optimism, arbitrum, bsc, avalanche, polygon } from '@reown/appkit/networks';
 import { defineChain } from '@reown/appkit/networks';
 import { sdk } from '@farcaster/miniapp-sdk';
+import { parseRecipients, validateRecipients } from './src/core/parse.js';
+import {
+    DEFAULT_BURN_ADDRESSES,
+    findBurnRecipients,
+    burnTotal
+} from './src/core/validate.js';
+import { extractAddresses, applyFixedAmount, generateRandomDistribution } from './src/core/distribute.js';
 
 const litvmLiteForge = defineChain({
   id: 4441,
@@ -66,12 +73,7 @@ function initializeApp() {
 
     // Maximum recipients allowed in a single batch (safety cap)
     const MAX_RECIPIENTS = 500;
-
-    // Known burn/dead addresses. Sending to these permanently locks funds.
-    const BURN_ADDRESSES = [
-        '0x0000000000000000000000000000000000000000', // null / burn address
-        '0x000000000000000000000000000000000000dead'  // common dead address
-    ];
+    const BURN_ADDRESSES = DEFAULT_BURN_ADDRESSES;
 
     // Load chains config
     let CHAINS_CONFIG = {};
@@ -229,14 +231,10 @@ function initializeApp() {
         }
     }
 
-    function findBurnRecipients() {
-        return state.recipients.filter(r => BURN_ADDRESSES.includes(r.address.toLowerCase()));
-    }
-
     function updateBurnWarning() {
-        const burnRecipients = findBurnRecipients();
+        const burnRecipients = findBurnRecipients(state.recipients, BURN_ADDRESSES);
         if (burnRecipients.length > 0) {
-            const total = burnRecipients.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+            const total = burnTotal(state.recipients, BURN_ADDRESSES);
             burnCountDisplay.textContent = String(burnRecipients.length);
             burnAmountDisplay.textContent = total.toFixed(8);
             burnWarningSection.classList.remove('hidden');
@@ -756,71 +754,18 @@ function initializeApp() {
     }
 
     function parseAndValidateData(data, type = 'text') {
-        let parsedData = [];
-        let errorCount = 0;
-        let isCSVHeader = false;
+        const decimals = state.token === 'ETH' ? 18 : state.tokenInfo.decimals;
 
-        if (type === 'json') {
-            try {
-                parsedData = JSON.parse(data);
-                if (!Array.isArray(parsedData)) throw new Error("JSON is not an array");
-                parsedData = parsedData.map(item => ({
-                    address: item.address,
-                    amount: item.amount.toString().trim()
-                })).filter(item => item.address && typeof item.address === 'string' && !isNaN(parseFloat(item.amount)) && parseFloat(item.amount) > 0);
-            } catch (e) {
-                showNotification('Invalid JSON format. Expected array of {"address": "0x...", "amount": 1.23}.', 'error');
-                return;
-            }
-        } else {
-            const lines = data.trim().split('\n');
-            if (lines.length > 0 && (lines[0].toLowerCase().includes('address') && lines[0].toLowerCase().includes('amount'))) {
-                isCSVHeader = true;
-            }
-            const startLine = isCSVHeader ? 1 : 0;
-
-            for (let i = startLine; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (line === '') continue;
-
-                const parts = line.split(/[\s,]+/).filter(p => p.trim());
-
-                if (parts.length < 2) {
-                    errorCount++;
-                    continue;
-                }
-
-                let address = parts[0].trim();
-                let amountStr = parts.slice(1).join(' ').trim().replace(/,/g, '');
-
-                const amountNum = parseFloat(amountStr);
-                if (address && !isNaN(amountNum) && amountNum > 0) {
-                    parsedData.push({ address, amount: amountStr });
-                } else {
-                    errorCount++;
-                }
-            }
+        const parsed = parseRecipients(data, type);
+        if (!parsed.ok) {
+            showNotification(parsed.error, 'error');
+            return;
         }
 
-        // Validate addresses and amounts
-        const validRecipients = [];
-        const decimals = state.token === 'ETH' ? 18 : state.tokenInfo.decimals;
-        parsedData.forEach(item => {
-            try {
-                const validAddress = ethers.getAddress(item.address);
-                // Validate amount doesn't exceed token decimals
-                const decimalPart = item.amount.split('.')[1];
-                if (decimalPart && decimalPart.length > decimals) {
-                    throw new Error(`Amount ${item.amount} exceeds ${decimals} decimal places`);
-                }
-                validRecipients.push({ address: validAddress, amount: item.amount });
-            } catch (e) {
-                console.warn(`Invalid recipient: ${item.address}, ${item.amount} - ${e.message}`);
-                errorCount++;
-            }
-        });
+        const { recipients, errorCount: validationErrors } = validateRecipients(parsed.entries, decimals);
+        const errorCount = parsed.errorCount + validationErrors;
 
-        state.recipients = validRecipients;
+        state.recipients = recipients;
 
         if (errorCount > 0) {
             showNotification(`Parsed ${state.recipients.length} valid recipients. Ignored ${errorCount} invalid lines (check address format or amounts).`, 'info');
@@ -865,7 +810,7 @@ function initializeApp() {
             }
 
             // Burn address guard: block dispatch unless the user explicitly confirms.
-            if (findBurnRecipients().length > 0 && !burnConfirmCheckbox.checked) {
+            if (findBurnRecipients(state.recipients, BURN_ADDRESSES).length > 0 && !burnConfirmCheckbox.checked) {
                 isReady = false;
             }
 
@@ -1110,25 +1055,10 @@ function initializeApp() {
             return;
         }
 
-        const lines = recipientsTextarea.value.split('\n');
-        let addressesFound = 0;
-
-        const updatedLines = lines.map(line => {
-            const trimmedLine = line.trim();
-            if (!trimmedLine) return '';
-
-            // Extract the first part which should be the address
-            const parts = trimmedLine.split(/[\s,]+/).filter(p => p.trim());
-            if (parts.length === 0) return '';
-
-            const firstPart = parts[0];
-            // Check if first part looks like an address (0x...)
-            if (firstPart.startsWith('0x') && firstPart.length >= 40) {
-                addressesFound++;
-                return `${firstPart}, ${amount}`;
-            }
-            return trimmedLine;
-        }).filter(line => line !== '');
+        const { lines: updatedLines, addressesFound } = applyFixedAmount(
+            recipientsTextarea.value.split('\n'),
+            amount
+        );
 
         if (addressesFound === 0) {
             showNotification('No valid addresses found to apply the amount to. Paste addresses first.', 'error');
@@ -1169,15 +1099,7 @@ function initializeApp() {
         if (isNaN(minVal) || minVal < 0) return showNotification('Please enter a valid min amount.', 'error');
         if (isNaN(maxVal) || maxVal <= minVal) return showNotification('Max must be greater than min.', 'error');
 
-        const lines = recipientsTextarea.value.split('\n');
-        const addresses = [];
-        lines.forEach(line => {
-            const firstPart = line.trim().split(/[\s,]+/)[0];
-            if (firstPart && firstPart.startsWith('0x') && firstPart.length >= 40) {
-                addresses.push(firstPart);
-            }
-        });
-
+        const addresses = extractAddresses(recipientsTextarea.value.split('\n'));
         if (addresses.length === 0) return showNotification('No addresses found. Please paste addresses first.', 'error');
 
         // Check if minimum distribution is even possible
@@ -1185,37 +1107,12 @@ function initializeApp() {
             return showNotification(`Insufficient budget! Giving ${minVal} to ${addresses.length} wallets requires ${addresses.length * minVal}.`, 'error');
         }
 
-        let runningTotal = 0;
-        const updatedLines = [];
-        const decimals = state.tokenInfo.decimals || 18;
-        const step = 1 / Math.pow(10, Math.min(decimals, 6)); // Smallest possible increment
-
-        for (let i = 0; i < addresses.length; i++) {
-            const remainingWallets = addresses.length - i;
-            const remainingBudget = totalBudget - runningTotal;
-
-            // Calculate a safe range for this wallet to ensure we can still give 'min' to others
-            const safeMax = Math.min(maxVal, remainingBudget - ((remainingWallets - 1) * minVal));
-            const safeMin = minVal;
-
-            let amt;
-            if (safeMax <= safeMin) {
-                amt = safeMin;
-            } else {
-                amt = Math.random() * (safeMax - safeMin) + safeMin;
-            }
-
-            // Round to sensible decimals to avoid float issues
-            amt = Math.floor(amt * Math.pow(10, 6)) / Math.pow(10, 6);
-
-            // Final safety check
-            if (runningTotal + amt > totalBudget && i === addresses.length - 1) {
-                amt = Math.max(0, totalBudget - runningTotal);
-            }
-
-            updatedLines.push(`${addresses[i]}, ${amt}`);
-            runningTotal += amt;
-        }
+        const { lines: updatedLines, runningTotal } = generateRandomDistribution(addresses, {
+            totalBudget,
+            minVal,
+            maxVal,
+            decimals: state.tokenInfo.decimals || 18
+        });
 
         recipientsTextarea.value = updatedLines.join('\n');
         parseAndValidateData(recipientsTextarea.value, 'text');

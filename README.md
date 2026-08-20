@@ -167,6 +167,18 @@ Address,Amount
 
 ## Development
 
+### Testing & Code Quality
+
+The core logic is extracted into pure, unit-tested modules under `src/core/` (no DOM/wallet dependencies). Run them locally:
+
+```bash
+npm test              # unit tests (Vitest)
+npm run check:chains  # validate chains.json + drift vs AppKit networks
+npm run build         # production build
+```
+
+CI (`.github/workflows/ci.yml`) runs syntax checks, chain-config validation, unit tests, and the production build on every push/PR.
+
 ### Local Setup
 
 1. Clone the repository
