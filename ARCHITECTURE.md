@@ -113,7 +113,11 @@ FarSend is a **single-page static dApp**: no backend, no build-time config, all 
 5. ⏳ Compiled-in contract-address canary / config integrity check — still open (the drift guard partially covers this; a boot-time canary that rejects a mismatched served config remains).
 
 **P2 (resilience/UX):**
-6. Debounce + generation-token the async summary/allowance path.
+6. ✅ Debounce + generation-token the async summary/allowance path (done):
+   - `updateSummary()` now bumps a `summaryGeneration` token and abandons stale in-flight results (no interleaving races on `dispatchBtn`/stepper/approval UI).
+   - ERC-20 allowance check split into `computeApproval()` (pure, no DOM) + `applyApprovalUI()` (guarded apply) + thin `checkAndPromptApproval()` for the dispatch path.
+   - High-frequency inputs (recipient textarea, ERC-20 address) are debounced via `src/core/debounce.js` (300ms/250ms), cutting live RPC calls during typing.
+   - Added `debounce` unit tests (31 total now).
 7. Standardize error handling; add provider fallback.
 8. Lazy-load the Reown chunk; review bundle size.
 9. Remove or implement the dead `webhookUrl`; reconcile manifest static-file vs redirect.

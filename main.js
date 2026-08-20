@@ -13,6 +13,7 @@ import {
     burnTotal
 } from './src/core/validate.js';
 import { extractAddresses, applyFixedAmount, generateRandomDistribution } from './src/core/distribute.js';
+import { debounce } from './src/core/debounce.js';
 
 const litvmLiteForge = defineChain({
   id: 4441,
@@ -182,6 +183,11 @@ function initializeApp() {
         eip1193Provider: null,
         burnConfirmed: false,
     };
+
+    // Monotonic token for the async summary/approval path. Every `updateSummary()`
+    // call bumps it; stale in-flight results compare their captured token against
+    // the latest and abandon the DOM update, preventing interleaving races.
+    let summaryGeneration = 0;
 
     // --- HELPER FUNCTIONS ---
 
@@ -480,38 +486,51 @@ function initializeApp() {
         }
     }
 
+    // Compute the ERC-20 allowance status. Pure-ish: returns a plain object and
+    // caches requiredAllowance on tokenInfo; does NOT touch the DOM, so callers
+    // can gate the DOM update behind the summary generation token.
+    async function computeApproval() {
+        const tokenContractWithSigner = state.tokenInfo.contract.connect(state.signer);
+        const decimals = state.tokenInfo.decimals;
+        const amounts = state.recipients.map(r => {
+            try {
+                return ethers.parseUnits(r.amount, decimals);
+            } catch (e) {
+                throw new Error(`Invalid amount format: ${r.amount}`);
+            }
+        });
+        const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
+        const allowance = await tokenContractWithSigner.allowance(state.walletAddress, state.currentChain?.contractAddress);
+
+        state.tokenInfo.allowance = allowance;
+        state.tokenInfo.requiredAllowance = totalAmountBN;
+
+        return {
+            needsApproval: allowance < totalAmountBN,
+            requiredFormatted: ethers.formatUnits(totalAmountBN, decimals),
+            currentFormatted: ethers.formatUnits(allowance, decimals),
+            symbol: state.tokenInfo.symbol,
+            decimals
+        };
+    }
+
+    function applyApprovalUI(a) {
+        if (a.needsApproval) {
+            approvalMessage.innerHTML = `To send a total of <strong>${a.requiredFormatted} ${a.symbol}</strong>, approve spending. Your current allowance is ${a.currentFormatted} ${a.symbol}.`;
+            approveAmountEl.textContent = a.requiredFormatted;
+            approveSymbolEl.textContent = a.symbol;
+            approvalSection.classList.remove('hidden');
+        } else {
+            approvalSection.classList.add('hidden');
+        }
+    }
+
     async function checkAndPromptApproval() {
         if (state.token !== 'ERC20' || !state.tokenInfo.contract || state.recipients.length === 0) return true;
-
         try {
-            const tokenContractWithSigner = state.tokenInfo.contract.connect(state.signer);
-            const decimals = state.tokenInfo.decimals;
-            const amounts = state.recipients.map(r => {
-                try {
-                    return ethers.parseUnits(r.amount, decimals);
-                } catch (e) {
-                    throw new Error(`Invalid amount format: ${r.amount}`);
-                }
-            });
-            const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
-
-            const allowance = await tokenContractWithSigner.allowance(state.walletAddress, state.currentChain?.contractAddress);
-
-            state.tokenInfo.allowance = allowance;
-            state.tokenInfo.requiredAllowance = totalAmountBN;
-
-            if (allowance < totalAmountBN) {
-                const requiredFormatted = ethers.formatUnits(totalAmountBN, decimals);
-                const currentFormatted = ethers.formatUnits(allowance, decimals);
-                approvalMessage.innerHTML = `To send a total of <strong>${requiredFormatted} ${state.tokenInfo.symbol}</strong>, approve spending. Your current allowance is ${currentFormatted} ${state.tokenInfo.symbol}.`;
-                approveAmountEl.textContent = requiredFormatted;
-                approveSymbolEl.textContent = state.tokenInfo.symbol;
-                approvalSection.classList.remove('hidden');
-                return false;
-            } else {
-                approvalSection.classList.add('hidden');
-                return true;
-            }
+            const a = await computeApproval();
+            applyApprovalUI(a);
+            return !a.needsApproval;
         } catch (error) {
             console.error('Approval check error:', error);
             showNotification(`Failed to check token allowance: ${error.message || 'Unknown error'}`, 'error');
@@ -781,6 +800,10 @@ function initializeApp() {
     }
 
     async function updateSummary() {
+        // Bump the generation token so older in-flight summary calls that resolve
+        // later cannot overwrite a newer state (prevents stale dispatchBtn/stepper).
+        const gen = ++summaryGeneration;
+
         const count = state.recipients.length;
         const displayTotal = state.recipients.reduce((sum, item) => sum + parseFloat(item.amount), 0);
 
@@ -796,8 +819,17 @@ function initializeApp() {
             if (state.token === 'ERC20') {
                 const isValidToken = state.tokenInfo.address && state.tokenInfo.symbol !== 'ETH' && state.tokenInfo.symbol !== 'ERC20';
                 if (isValidToken) {
-                    const isApproved = await checkAndPromptApproval();
-                    isReady = isApproved;
+                    try {
+                        const a = await computeApproval();
+                        if (gen !== summaryGeneration) return; // superseded by a newer refresh
+                        applyApprovalUI(a);
+                        isReady = !a.needsApproval;
+                    } catch (e) {
+                        if (gen !== summaryGeneration) return;
+                        console.error('Approval check error:', e);
+                        showNotification(`Failed to check token allowance: ${e.message || 'Unknown error'}`, 'error');
+                        isReady = false;
+                    }
                 } else {
                     isReady = false;
                     if (erc20Address.value.length > 0) {
@@ -819,6 +851,8 @@ function initializeApp() {
                 isReady = false;
             }
         }
+
+        if (gen !== summaryGeneration) return; // stale result; a newer refresh won
 
         dispatchBtn.disabled = !isReady;
         if (isReady && count > 0) {
@@ -1033,8 +1067,10 @@ function initializeApp() {
         parseAndValidateData(recipientsTextarea.value, 'text');
     });
 
-    erc20Address.addEventListener('input', async (e) => {
-        const address = e.target.value.trim();
+    // Debounce high-frequency input. The token-contract check and the
+    // parse+summary pipeline both do live RPC (symbol/decimals/allowance), so we
+    // wait for a pause in typing instead of firing on every keystroke.
+    const scheduleErc20Check = debounce(async (address) => {
         if (ethers.isAddress(address)) {
             await validateERC20Address(address);
         } else {
@@ -1044,9 +1080,13 @@ function initializeApp() {
             state.tokenInfo = { address: '', symbol: 'ERC20', decimals: 18, contract: null, allowance: 0n, requiredAllowance: 0n };
         }
         await updateSummary();
-    });
+    }, 300);
 
-    recipientsTextarea.addEventListener('input', () => parseAndValidateData(recipientsTextarea.value, 'text'));
+    const scheduleRecipientParse = debounce((value) => parseAndValidateData(value, 'text'), 250);
+
+    erc20Address.addEventListener('input', (e) => scheduleErc20Check(e.target.value.trim()));
+
+    recipientsTextarea.addEventListener('input', () => scheduleRecipientParse(recipientsTextarea.value));
 
     applyBulkAmountBtn.addEventListener('click', () => {
         const amount = bulkAmountInput.value.trim();
