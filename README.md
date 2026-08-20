@@ -84,15 +84,18 @@ FarSend is a web-based batch sender that enables users to send ETH and ERC-20 to
 
 ## Smart Contract
 
-FarSend uses a deployed batch sender contract on Base Mainnet:
-
-**Contract Address**: `0x8878b70a01bdda92ab8ea48dd7893b64c69298c0`
+FarSend uses a batch sender contract that is deployed once per supported chain. The full source is in **[`BatchSender.sol`](BatchSender.sol)** — the standard, stateless "Disperse" pattern with **no owner, no upgrade path, and no withdraw function**, so it can only ever move funds to the exact recipients the caller specifies.
 
 **Functions**:
-- `disperseEther(address[] recipients, uint256[] amounts)` - Batch send ETH
+- `disperseEther(address[] recipients, uint256[] amounts)` - Batch send ETH (payable, refunds leftover)
 - `disperseToken(address token, address[] recipients, uint256[] amounts)` - Batch send ERC-20 tokens
 
-[View on BaseScan](https://basescan.org/address/0x8878b70a01bdda92ab8ea48dd7893b64c69298c0)
+Per-chain addresses are defined in `public/chains.json`. The ABI is identical across all deployments, so:
+
+- Existing chains do **not** need to be redeployed.
+- To support a new chain, simply deploy the same `BatchSender.sol` on it and add its address + RPC to `public/chains.json` — no frontend code change required.
+
+**Base Mainnet**: `0x8878b70a01bdda92ab8ea48dd7893b64c69298c0` — [View on BaseScan](https://basescan.org/address/0x8878b70a01bdda92ab8ea48dd7893b64c69298c0)
 
 ---
 
@@ -188,14 +191,25 @@ php -S localhost:8000
 
 ### Configuration
 
-The app automatically loads the Base contract configuration from `base.json`:
+The app loads the chain + contract configuration from `public/chains.json`:
 
 ```json
 {
-  "address": "0x8878b70a01bdda92ab8ea48dd7893b64c69298c0",
+  "chains": {
+    "8453": {
+      "name": "Base",
+      "chainId": 8453,
+      "rpcUrl": "https://mainnet.base.org",
+      "explorerUrl": "https://basescan.org",
+      "nativeCurrency": { "symbol": "ETH", "decimals": 18 },
+      "contractAddress": "0x8878b70a01bdda92ab8ea48dd7893b64c69298c0"
+    }
+  },
   "abi": [...]
 }
 ```
+
+Add a new chain by appending an entry (with the same ABI) and deploying `BatchSender.sol` there.
 
 ### Deployment
 

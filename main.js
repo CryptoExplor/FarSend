@@ -64,6 +64,15 @@ let appKit;
 function initializeApp() {
     // --- CONSTANTS & CONFIGURATION ---
 
+    // Maximum recipients allowed in a single batch (safety cap)
+    const MAX_RECIPIENTS = 500;
+
+    // Known burn/dead addresses. Sending to these permanently locks funds.
+    const BURN_ADDRESSES = [
+        '0x0000000000000000000000000000000000000000', // null / burn address
+        '0x000000000000000000000000000000000000dead'  // common dead address
+    ];
+
     // Load chains config
     let CHAINS_CONFIG = {};
     let CONTRACT_ABI = [];
@@ -143,6 +152,10 @@ function initializeApp() {
     const approvalMessage = document.getElementById('approvalMessage');
     const approveAmountEl = document.getElementById('approveAmount');
     const approveSymbolEl = document.getElementById('approveSymbol');
+    const burnWarningSection = document.getElementById('burnWarningSection');
+    const burnConfirmCheckbox = document.getElementById('burnConfirmCheckbox');
+    const burnCountDisplay = document.getElementById('burnCountDisplay');
+    const burnAmountDisplay = document.getElementById('burnAmountDisplay');
 
     // --- APPLICATION STATE ---
     const state = {
@@ -165,6 +178,7 @@ function initializeApp() {
         currentStep: 1,
         accountsChangedListenerAdded: false,
         eip1193Provider: null,
+        burnConfirmed: false,
     };
 
     // --- HELPER FUNCTIONS ---
@@ -213,6 +227,54 @@ function initializeApp() {
             chainSelector.value = '';
             showNotification('Unsupported network selected', 'error');
         }
+    }
+
+    function findBurnRecipients() {
+        return state.recipients.filter(r => BURN_ADDRESSES.includes(r.address.toLowerCase()));
+    }
+
+    function updateBurnWarning() {
+        const burnRecipients = findBurnRecipients();
+        if (burnRecipients.length > 0) {
+            const total = burnRecipients.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+            burnCountDisplay.textContent = String(burnRecipients.length);
+            burnAmountDisplay.textContent = total.toFixed(8);
+            burnWarningSection.classList.remove('hidden');
+        } else {
+            // No burn addresses present: hide the warning and clear the confirmation.
+            burnWarningSection.classList.add('hidden');
+            burnConfirmCheckbox.checked = false;
+            state.burnConfirmed = false;
+        }
+    }
+
+    function decodeRevertReason(error) {
+        // Collect any revert data ethers may surface (top-level or nested).
+        const candidates = [];
+        if (error.data) candidates.push(error.data);
+        if (error.error?.data) candidates.push(error.error.data);
+
+        for (const raw of candidates) {
+            try {
+                const data = String(raw);
+                const hexData = data.startsWith('0x') ? data : '0x' + data;
+                const iface = new ethers.Interface(CONTRACT_ABI);
+
+                // Try to parse a custom/error object first.
+                const decoded = iface.parseError(hexData);
+                if (decoded) {
+                    return `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
+                }
+
+                // Fall back to decoding a standard Error("reason") revert string.
+                if (hexData.startsWith('0x08c379a0')) {
+                    return ethers.toUtf8String('0x' + hexData.slice(10));
+                }
+            } catch (e) {
+                // Not decodable; try the next candidate.
+            }
+        }
+        return null;
     }
 
     function showNotification(message, type = 'success') {
@@ -511,6 +573,7 @@ function initializeApp() {
 
         try {
             if (recipients.length === 0) throw new Error('No recipients defined');
+            if (recipients.length > MAX_RECIPIENTS) throw new Error(`Batch exceeds the ${MAX_RECIPIENTS} recipient safety limit. Please split into smaller batches.`);
 
             const decimals = token === 'ETH' ? 18 : tokenInfo.decimals;
             const amounts = recipients.map(r => {
@@ -589,21 +652,13 @@ function initializeApp() {
                 } catch (estimateError) {
                     console.error('Gas estimation failed:', estimateError);
 
-                    // If the user rejected the estimation, don't try the fallback
+                    // Never broadcast with a manual gas limit: if estimation failed the
+                    // call would likely revert, and broadcasting it would burn the user's
+                    // gas (and move the ETH out and back minus fees). Fail safely instead.
                     if (estimateError.code === 'ACTION_REJECTED') {
                         throw estimateError;
                     }
-
-                    // Fallback with manual gas limit for other errors
-                    const fallbackGasLimit = 200000n + (BigInt(recipients.length) * 50000n);
-                    tx = await batchContract.disperseEther(
-                        recipientAddresses,
-                        amounts,
-                        {
-                            value: totalValue,
-                            gasLimit: fallbackGasLimit
-                        }
-                    );
+                    throw new Error(`Gas estimation failed — the transaction would likely revert. ${estimateError.reason || estimateError.message}`);
                 }
             } else {
                 const batchContractWithSigner = batchContract.connect(signer);
@@ -630,21 +685,12 @@ function initializeApp() {
                 } catch (estimateError) {
                     console.error('Gas estimation failed:', estimateError);
 
-                    // If the user rejected the estimation, don't try the fallback
+                    // Never broadcast with a manual gas limit: if estimation failed the
+                    // call would likely revert, and broadcasting it would burn the user's gas.
                     if (estimateError.code === 'ACTION_REJECTED') {
                         throw estimateError;
                     }
-
-                    // Fallback with manual gas limit for other errors
-                    const fallbackGasLimit = 200000n + (BigInt(recipients.length) * 70000n);
-                    tx = await batchContractWithSigner.disperseToken(
-                        tokenInfo.address,
-                        recipientAddresses,
-                        amounts,
-                        {
-                            gasLimit: fallbackGasLimit
-                        }
-                    );
+                    throw new Error(`Gas estimation failed — the transaction would likely revert. ${estimateError.reason || estimateError.message}`);
                 }
             }
 
@@ -680,38 +726,9 @@ function initializeApp() {
             let reason = error.message || 'Unknown error';
             if (error.reason) {
                 reason = error.reason;
-            } else if (error.data) {
-                try {
-                    const hexData = error.data.startsWith('0x') ? error.data : '0x' + error.data;
-                    const iface = new ethers.Interface(CONTRACT_ABI);
-                    const decoded = iface.parseError(hexData);
-                    if (decoded) {
-                        reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
-                    } else {
-                        const revertSelector = '0x08c379a0';
-                        if (hexData.startsWith(revertSelector)) {
-                            const stringData = hexData.slice(10);
-                            reason = ethers.toUtf8String('0x' + stringData);
-                        }
-                    }
-                } catch (decodeErr) {
-                    console.error('Revert decode failed:', decodeErr);
-                }
-            } else if (error.error?.data) {
-                try {
-                    const data = error.error.data;
-                    const hexData = data.startsWith('0x') ? data : '0x' + data.slice(2 || data);
-                    const iface = new ethers.Interface(CONTRACT_ABI);
-                    const decoded = iface.parseError(hexData);
-                    if (decoded) {
-                        reason = `${decoded.name}(${decoded.args.map(arg => arg.toString()).join(', ')})`;
-                    } else if (hexData.startsWith('0x08c379a0')) {
-                        const stringData = hexData.slice(10);
-                        reason = ethers.toUtf8String('0x' + stringData);
-                    }
-                } catch (decodeErr) {
-                    console.error('Revert decode failed:', decodeErr);
-                }
+            } else {
+                const decoded = decodeRevertReason(error);
+                if (decoded) reason = decoded;
             }
             const msg = error.code === 'ACTION_REJECTED' ? 'Transaction rejected by user.' : `Dispatch failed: ${reason}`;
             showNotification(msg, 'error');
@@ -798,6 +815,7 @@ function initializeApp() {
             showNotification('No valid recipients found in the data.', 'error');
         }
 
+        updateBurnWarning();
         updateSummary();
         updatePreview();
     }
@@ -829,6 +847,16 @@ function initializeApp() {
             } else {
                 isReady = true;
                 approvalSection.classList.add('hidden');
+            }
+
+            // Burn address guard: block dispatch unless the user explicitly confirms.
+            if (findBurnRecipients().length > 0 && !burnConfirmCheckbox.checked) {
+                isReady = false;
+            }
+
+            // Safety cap on batch size.
+            if (count > MAX_RECIPIENTS) {
+                isReady = false;
             }
         }
 
@@ -1010,6 +1038,11 @@ function initializeApp() {
     connectWalletBtn.addEventListener('click', handleConnectClick);
     approveBtn.addEventListener('click', handleApprove);
     dispatchBtn.addEventListener('click', handleDispatch);
+
+    burnConfirmCheckbox.addEventListener('change', () => {
+        state.burnConfirmed = burnConfirmCheckbox.checked;
+        updateSummary();
+    });
 
     tokenSelect.addEventListener('change', () => {
         tokenSelect.classList.add('animate-bounce');
@@ -1218,9 +1251,6 @@ function initializeApp() {
 
                         updateChainDisplay(currentChainId);
                         showNotification(`Network switched to ${state.currentChain?.name || 'unknown chain'}`, 'info');
-                    } else {
-                        // Log when no change is detected for debugging
-                        console.log('Polling: no chain change detected, still on:', currentChainId);
                     }
                 } catch (error) {
                     console.error('Chain check failed:', error);
@@ -1454,18 +1484,11 @@ function initializeApp() {
             // Wait a bit for AppKit to initialize
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            const initialState = window.appKit.getState();
-            console.log('Initial AppKit state:', initialState);
-
-            // Try to get the wallet provider
+            // Try to get the wallet provider. The main subscribeProviders handler above
+            // already listens for wallet state, so we only need to log the detected state.
             const eip1193Provider = await window.appKit.getWalletProvider();
-
             if (eip1193Provider) {
-                console.log('Found existing wallet provider on page load, triggering connection handler');
-                // Manually trigger the subscriber with the provider
-                window.appKit.subscribeProviders(async (providerState) => {
-                    // This will trigger the main subscriber above
-                });
+                console.log('Existing wallet provider detected on page load');
             } else {
                 console.log('No existing provider found');
             }
