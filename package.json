@@ -7,18 +7,22 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:chains": "node scripts/check-chains.mjs",
     "deploy": "vercel --prod"
   },
   "dependencies": {
+    "@farcaster/miniapp-sdk": "^0.2.0",
     "@reown/appkit": "^1.8.14",
     "@reown/appkit-adapter-ethers": "^1.8.14",
-    "ethers": "^6.15.0",
     "canvas-confetti": "^1.9.3",
-    "@farcaster/miniapp-sdk": "^0.2.0"
+    "ethers": "^6.15.0"
   },
   "devDependencies": {
+    "vercel": "^37.14.0",
     "vite": "^5.4.11",
-    "vercel": "^37.14.0"
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=18.0.0"
