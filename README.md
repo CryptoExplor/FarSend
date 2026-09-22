@@ -180,7 +180,7 @@ npm run check:chains  # validate chains.json + drift vs AppKit networks
 npm run build         # production build
 ```
 
-CI (`.github/workflows/ci.yml`) runs syntax checks, chain-config validation, unit tests, and the production build on every push/PR.
+A CI workflow (`npm ci` → `node --check` → `npm run check:chains` → `npm test` → `npm run build`) is ready at `.github/workflows/ci.yml` but **not yet active on GitHub** — the automation account used for this branch lacks the `workflows` permission, so the file is held locally. Run the same pipeline locally with the commands above until it lands.
 
 ### Local Setup
 

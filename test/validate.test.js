@@ -63,4 +63,22 @@ describe('burnTotal', () => {
     it('returns 0 when no burn addresses', () => {
         expect(burnTotal([{ address: NORMAL, amount: '5' }])).toBe(0);
     });
+
+    it('sums decimals exactly (no float artifacts)', () => {
+        const recipients = [
+            { address: ZERO, amount: '0.1' },
+            { address: ZERO, amount: '0.2' },
+            { address: DEAD, amount: '1.15' }
+        ];
+        // 0.1 + 0.2 is 0.30000000000000004 in float; exact sum is 1.45.
+        expect(burnTotal(recipients)).toBe(1.45);
+    });
+
+    it('aligns mixed fractional lengths exactly', () => {
+        const recipients = [
+            { address: ZERO, amount: '1' },
+            { address: DEAD, amount: '0.0000001' }
+        ];
+        expect(burnTotal(recipients)).toBe(1.0000001);
+    });
 });

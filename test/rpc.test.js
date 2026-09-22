@@ -22,10 +22,22 @@ describe('getChainRpcUrls', () => {
 });
 
 describe('createFallbackProvider', () => {
-    it('builds a provider from the primary rpc url', () => {
-        const p = createFallbackProvider({ rpcUrl: 'https://a' });
-        expect(p).not.toBeNull();
-        expect(typeof p.send).toBe('function');
+    it('builds one provider per configured url, primary first', () => {
+        const providers = createFallbackProvider({
+            rpcUrl: 'https://primary',
+            fallbackRpcUrls: ['https://fallback-a', 'https://primary']
+        });
+        expect(Array.isArray(providers)).toBe(true);
+        // primary + 1 unique fallback (duplicate of primary dropped)
+        expect(providers).toHaveLength(2);
+        expect(typeof providers[0].send).toBe('function');
+        expect(typeof providers[1].send).toBe('function');
+    });
+
+    it('pins a static network when chainId is known (no eth_chainId probing)', async () => {
+        const providers = createFallbackProvider({ chainId: 8453, rpcUrl: 'https://a' });
+        const network = await providers[0].getNetwork();
+        expect(network.chainId).toBe(8453n);
     });
 
     it('returns null when no rpc url', () => {
@@ -39,16 +51,39 @@ describe('readWithFallback', () => {
         expect(r).toBe('primary');
     });
 
-    it('falls back when primary throws and a fallback provider is present', async () => {
+    it('falls back to a single provider when primary throws', async () => {
         const r = await readWithFallback(
-            () => Promise.reject(new Error('rpc down')),
-            () => Promise.resolve('fallback'),
-            { fallbackProvider: {} }
+            () => Promise.reject(new Error('wallet rpc down')),
+            (p) => `fallback:${p.id}`,
+            { fallbackProvider: { id: 'pub1' } }
         );
-        expect(r).toBe('fallback');
+        expect(r).toBe('fallback:pub1');
     });
 
-    it('re-throws primary error when no fallback provider', async () => {
+    it('tries the provider list in order until one succeeds', async () => {
+        const calls = [];
+        const r = await readWithFallback(
+            () => Promise.reject(new Error('wallet rpc down')),
+            (p) => {
+                calls.push(p.id);
+                if (p.id === 'pub1') throw new Error('public rpc down');
+                return `ok:${p.id}`;
+            },
+            { fallbackProvider: [{ id: 'pub1' }, { id: 'pub2' }, { id: 'pub3' }] }
+        );
+        expect(r).toBe('ok:pub2');
+        expect(calls).toEqual(['pub1', 'pub2']); // stopped at first success
+    });
+
+    it('throws the last fallback error when every provider fails', async () => {
+        await expect(readWithFallback(
+            () => Promise.reject(new Error('wallet rpc down')),
+            (p) => Promise.reject(new Error(`down:${p.id}`)),
+            { fallbackProvider: [{ id: 'pub1' }, { id: 'pub2' }] }
+        )).rejects.toThrow('down:pub2');
+    });
+
+    it('re-throws the primary error when no fallback provider is given', async () => {
         await expect(readWithFallback(
             () => Promise.reject(new Error('rpc down')),
             () => Promise.resolve('fallback')
@@ -59,7 +94,7 @@ describe('readWithFallback', () => {
         await expect(readWithFallback(
             () => Promise.reject({ code: 'ACTION_REJECTED' }),
             () => Promise.resolve('fallback'),
-            { fallbackProvider: {} }
+            { fallbackProvider: { id: 'pub1' } }
         )).rejects.toMatchObject({ code: 'ACTION_REJECTED' });
     });
 });

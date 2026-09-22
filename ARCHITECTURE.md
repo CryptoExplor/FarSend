@@ -81,9 +81,9 @@ FarSend is a **single-page static dApp**: no backend, no build-time config, all 
 - Emoji-as-icons replaced with proper inline **SVG** icons (`aria-hidden` + `focusable="false"` on decorative ones); notifications are now a live region (`role="status"` + `aria-live="polite"`). Good progress.
 - Remaining: run a Lighthouse/AXE pass; ensure color-only status cues have a text fallback (they do via notification text).
 
-### 2.9 Testing & CI — ❌ (High)
-- **No tests at all** for a tool whose sole purpose is moving money. The pure logic (parsing, validation, distribution, burn detection) is easily testable.
-- **Recommendation:** add Vitest unit tests for `parse/validate/distribute`; add a GitHub Action that runs `npm ci`, `npm run build`, `node --check`, and the tests on every PR.
+### 2.9 Testing & CI — ✅ tests added / ⚠️ CI not yet active on GitHub
+- Vitest suite now covers the pure logic (`src/core/*`): parsing, validation, distribution, debounce, error decoding, RPC fallback, and the EIP-5792 dispatch layer (see `test/`).
+- The GitHub Action (`.github/workflows/ci.yml`) is written but **not active on GitHub**: the automation account for this branch lacks the `workflows` permission, so the file is held locally until that is granted. It runs `npm ci`, `node --check`, `check:chains`, `npm test`, and `npm run build` — the same pipeline can be run locally with those commands.
 
 ---
 
@@ -109,7 +109,7 @@ FarSend is a **single-page static dApp**: no backend, no build-time config, all 
    - `src/core/validate.js` — `isBurnAddress`, `findBurnRecipients`, `burnTotal`, `DEFAULT_BURN_ADDRESSES`
    - `src/core/distribute.js` — `extractAddresses`, `applyFixedAmount`, `generateRandomDistribution`
    - `test/{parse,validate,distribute}.test.js` — **28 passing tests**
-4. ✅ Add CI — `.github/workflows/ci.yml`: `npm ci` → `node --check` → `check:chains` → `npm test` → `npm run build`. (`package-lock.json` is now committed so `npm ci` is reproducible.)
+4. ⚠️ CI — `.github/workflows/ci.yml` is written (`npm ci` → `node --check` → `check:chains` → `npm test` → `npm run build`) and `package-lock.json` is committed so `npm ci` is reproducible, **but the workflow is not active on GitHub**: the automation account used for this branch lacks the `workflows` permission, so the file is held locally until that is granted. Treat CI as "ready, not running".
 5. ⏳ Compiled-in contract-address canary / config integrity check — still open (the drift guard partially covers this; a boot-time canary that rejects a mismatched served config remains).
 
 **P2 (resilience/UX):**
@@ -130,8 +130,9 @@ FarSend is a **single-page static dApp**: no backend, no build-time config, all 
 FarSend now works with **Base Account** — the passkey-secured ERC-4337 smart wallet powering the Base App:
 
 - **Featured in the wallet modal:** AppKit config sets `featuredWalletIds: [BASE_ACCOUNT_WALLET_ID]` (the official Base Account wallet ID) so it appears first, alongside all other wallets (`allWallets: 'SHOW'`). It connects through the same ethers adapter — no dedicated button; the standard Reown Connect flow is the single entry point for all wallets.
-- **EIP-5792 native dispatch:** `src/core/sendCalls.js` implements `wallet_getCapabilities` detection + `wallet_sendCalls` (atomic batch) + `wallet_getCallsStatus` polling. In `handleDispatch`, when the connected provider advertises the capability (smart wallets), the batch is submitted via `wallet_sendCalls` — letting the wallet bundle and (where sponsored) handle gas. Otherwise it falls back to the existing `signer.sendTransaction` path (EOA wallets). User rejections are always surfaced.
-- **Unit tested:** tests in `test/sendCalls.test.js` cover capability detection, call shaping (incl. non-payable ERC20 value=0x0), submission, and status polling/timeout. Suite is 62 tests.
+- **EIP-5792 native dispatch (spec-conformant):** `src/core/sendCalls.js` implements the final EIP-5792 shapes: `wallet_getCapabilities([account, [chainIdHex]])` checking `atomic.status === 'supported' | 'ready'` (per-chain or `0x0` global; legacy draft booleans tolerated, no cross-chain fallback), `wallet_sendCalls` with an **app-provided `id`** (wallet must echo it) returning `{ id }`, and `wallet_getCallsStatus` with **numeric status codes** (1xx pending / 2xx confirmed / 4xx offchain failure / 5xx-6xx onchain failure; legacy strings tolerated).
+- **No-double-send invariant:** once `wallet_sendCalls` *resolves*, the batch is with the wallet and is **never** submitted again — not on poll timeout ("pending in your wallet, do not resubmit"), not on FAILED/UNKNOWN status. The standard `signer.sendTransaction` path is reachable only when `classifySendCallsError()` proves nothing was submitted (capability absent, or a provably pre-submission error such as method-not-found / invalid-params / bundle-too-large — the exact case the spec's Backwards-Compatibility section sanctions). Anything uncertain → abort with instructions to verify in the wallet first. User rejections (4001/4100/5750) are always surfaced.
+- **Unit tested:** `test/sendCalls.test.js` encodes the spec: capability detection (incl. `0x0` handling and the no-cross-chain-fallback rule), batch-id generation, request/response shaping, numeric status mapping, 5730/timeout handling, and the full `classifySendCallsError` decision table.
 
 **Trade-off / note:** gas *sponsorship* for Base Account requires app registration (Base Gasless campaign / paymaster) and is not hardcoded; the SDK path lets a connected smart wallet apply its own gas policies. To add guaranteed sponsored gas later, register the app and pass a `capabilities.paymasterService` on `wallet_sendCalls`.
 

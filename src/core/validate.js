@@ -28,8 +28,28 @@ export function findBurnRecipients(recipients, burnAddresses = DEFAULT_BURN_ADDR
 
 /**
  * Total (display) amount going to burn/dead addresses across a recipient list.
+ *
+ * Sums the decimal amount strings exactly (BigInt on a common scale) so the
+ * burn warning never shows float artifacts like 0.30000000000000004. This is
+ * a display value; dispatch amounts are always BigInt via ethers.parseUnits.
+ *
+ * @param {Array<{address: string, amount: string}>} recipients
+ * @param {string[]} [burnAddresses]
+ * @returns {number}
  */
 export function burnTotal(recipients, burnAddresses = DEFAULT_BURN_ADDRESSES) {
-    return findBurnRecipients(recipients, burnAddresses)
-        .reduce((sum, r) => sum + parseFloat(r.amount), 0);
+    const amounts = findBurnRecipients(recipients, burnAddresses).map(r => String(r.amount));
+    if (amounts.length === 0) return 0;
+    const parts = amounts.map(a => {
+        const [int, frac = ''] = a.split('.');
+        return { int: int || '0', frac };
+    });
+    const maxFrac = Math.max(...parts.map(p => p.frac.length));
+    const scale = 10n ** BigInt(maxFrac);
+    let total = 0n;
+    for (const p of parts) {
+        const fracPadded = (p.frac + '0'.repeat(maxFrac)).slice(0, maxFrac);
+        total += BigInt(p.int) * scale + BigInt(fracPadded || '0');
+    }
+    return Number(total) / Number(scale);
 }

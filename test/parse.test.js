@@ -1,5 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { parseRecipients, validateRecipients, splitLine } from '../src/core/parse.js';
+import { parseRecipients, validateRecipients, splitLine, escapeHtml } from '../src/core/parse.js';
+
+describe('escapeHtml', () => {
+    it('escapes the five HTML-significant characters', () => {
+        expect(escapeHtml(`<img src=x onerror="alert(1)">&'`)).toBe(
+            '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;&amp;&#39;'
+        );
+    });
+
+    it('leaves a plain token symbol untouched', () => {
+        expect(escapeHtml('USDC')).toBe('USDC');
+        expect(escapeHtml('1INCH')).toBe('1INCH');
+    });
+
+    it('stringifies non-string input safely', () => {
+        expect(escapeHtml(null)).toBe('');
+        expect(escapeHtml(18)).toBe('18');
+    });
+});
 
 const CHECKSUMMED = '0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B';
 

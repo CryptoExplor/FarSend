@@ -2,7 +2,7 @@
 import { ethers } from 'ethers';
 import confetti from 'canvas-confetti';
 import { sdk } from '@farcaster/miniapp-sdk';
-import { parseRecipients, validateRecipients } from './src/core/parse.js';
+import { parseRecipients, validateRecipients, escapeHtml } from './src/core/parse.js';
 import {
     DEFAULT_BURN_ADDRESSES,
     findBurnRecipients,
@@ -12,7 +12,7 @@ import { extractAddresses, applyFixedAmount, generateRandomDistribution } from '
 import { debounce } from './src/core/debounce.js';
 import { describeError } from './src/core/errors.js';
 import { createFallbackProvider, readWithFallback } from './src/core/rpc.js';
-import { supportsSendCalls, sendCalls, waitForSendCalls } from './src/core/sendCalls.js';
+import { supportsSendCalls, sendCalls, waitForSendCalls, classifySendCallsError } from './src/core/sendCalls.js';
 
 // Initialize Farcaster SDK
 sdk.actions.ready({ disableNativeGestures: true });
@@ -273,9 +273,11 @@ function initializeApp() {
         }
     }
 
-    // Fallback read-only provider for the current chain (used when the wallet
-    // RPC is flaky). Signing never uses this.
-    function fallbackProvider() {
+    // Fallback read-only providers for the current chain, ordered primary
+    // public RPC first then fallbackRpcUrls (used when the wallet RPC is
+    // flaky; readWithFallback fails over across them). Signing never uses
+    // these.
+    function fallbackProviders() {
         if (!state.currentChain) return null;
         return createFallbackProvider(state.currentChain);
     }
@@ -477,11 +479,11 @@ function initializeApp() {
             showNotification('Please connect your wallet first.', 'error');
             return false;
         }
-        const fb = fallbackProvider();
+        const fb = fallbackProviders();
         try {
             const meta = await readWithFallback(
                 () => readTokenMetadata(address, state.provider),
-                () => readTokenMetadata(address, fb),
+                (p) => readTokenMetadata(address, p),
                 { fallbackProvider: fb }
             );
 
@@ -529,10 +531,10 @@ function initializeApp() {
         const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
 
         const contractAddress = state.currentChain?.contractAddress;
-        const fb = fallbackProvider();
+        const fb = fallbackProviders();
         const allowance = await readWithFallback(
             () => tokenContractWithSigner.allowance(state.walletAddress, contractAddress),
-            () => state.tokenInfo.contract.connect(fb).allowance(state.walletAddress, contractAddress),
+            (p) => state.tokenInfo.contract.connect(p).allowance(state.walletAddress, contractAddress),
             { fallbackProvider: fb }
         );
 
@@ -550,7 +552,8 @@ function initializeApp() {
 
     function applyApprovalUI(a) {
         if (a.needsApproval) {
-            approvalMessage.innerHTML = `To send a total of <strong>${a.requiredFormatted} ${a.symbol}</strong>, approve spending. Your current allowance is ${a.currentFormatted} ${a.symbol}.`;
+            // a.symbol comes from an on-chain contract (untrusted) — escape it.
+            approvalMessage.innerHTML = `To send a total of <strong>${a.requiredFormatted} ${escapeHtml(a.symbol)}</strong>, approve spending. Your current allowance is ${a.currentFormatted} ${escapeHtml(a.symbol)}.`;
             approveAmountEl.textContent = a.requiredFormatted;
             approveSymbolEl.textContent = a.symbol;
             approvalSection.classList.remove('hidden');
@@ -619,7 +622,8 @@ function initializeApp() {
         } finally {
             approveBtn.disabled = false;
             const displayAmount = parseFloat(amountToDisplay).toFixed(state.tokenInfo.decimals > 4 ? 4 : state.tokenInfo.decimals);
-            approveBtn.innerHTML = `Approve <span id="approveAmount">${displayAmount}</span> <span id="approveSymbol">${state.tokenInfo.symbol}</span>`;
+            // state.tokenInfo.symbol comes from an on-chain contract (untrusted) — escape it.
+            approveBtn.innerHTML = `Approve <span id="approveAmount">${displayAmount}</span> <span id="approveSymbol">${escapeHtml(state.tokenInfo.symbol)}</span>`;
             approveAmountEl.textContent = displayAmount;
             approveSymbolEl.textContent = state.tokenInfo.symbol;
         }
@@ -639,6 +643,12 @@ function initializeApp() {
         try {
             if (recipients.length === 0) throw new Error('No recipients defined');
             if (recipients.length > MAX_RECIPIENTS) throw new Error(`Batch exceeds the ${MAX_RECIPIENTS} recipient safety limit. Please split into smaller batches.`);
+            // Defense in depth: the UI disables Dispatch until the burn
+            // acknowledgement is ticked, but re-verify here so state changes
+            // (or a stale UI) can never bypass the gate.
+            if (findBurnRecipients(recipients, BURN_ADDRESSES).length > 0 && !state.burnConfirmed) {
+                throw new Error('This batch contains burn/dead addresses. Tick the burn acknowledgement before dispatching.');
+            }
 
             const decimals = token === 'ETH' ? 18 : tokenInfo.decimals;
             const amounts = recipients.map(r => {
@@ -650,11 +660,11 @@ function initializeApp() {
             });
             const totalAmountBN = amounts.reduce((sum, amt) => sum + amt, 0n);
 
-            const fb = fallbackProvider();
+            const fb = fallbackProviders();
             if (token === 'ETH') {
                 const balance = await readWithFallback(
                     () => state.provider.getBalance(walletAddress),
-                    () => fb.getBalance(walletAddress),
+                    (p) => p.getBalance(walletAddress),
                     { fallbackProvider: fb }
                 );
                 if (totalAmountBN > balance) {
@@ -671,8 +681,8 @@ function initializeApp() {
                         tokenContractWithSigner.balanceOf(walletAddress),
                         tokenContractWithSigner.allowance(walletAddress, contractAddress)
                     ]),
-                    () => {
-                        const c = tokenInfo.contract.connect(fb);
+                    (p) => {
+                        const c = tokenInfo.contract.connect(p);
                         return Promise.all([
                             c.balanceOf(walletAddress),
                             c.allowance(walletAddress, contractAddress)
@@ -720,42 +730,64 @@ function initializeApp() {
                 ? iface.encodeFunctionData('disperseEther', [recipientAddresses, amounts])
                 : iface.encodeFunctionData('disperseToken', [tokenInfo.address, recipientAddresses, amounts]);
 
-            // Prefer the EIP-5792 smart-wallet path when available (Base Account,
-            // other ERC-4337 wallets). It lets the wallet bundle/sponsor the batch
-            // atomically and handles gas estimation internally.
-            if (state.eip1193Provider) {
+            // Prefer the EIP-5792 smart-wallet path when the wallet advertises
+            // it (Base Account, other ERC-4337 wallets). It lets the wallet
+            // handle the batch atomically and apply its own gas policies.
+            //
+            // NO-DOUBLE-SEND INVARIANT: once wallet_sendCalls RESOLVES the
+            // batch is with the wallet and must NEVER be submitted again —
+            // not even on a status-poll timeout. The standard signer path
+            // below is only reached when classifySendCallsError proves that
+            // nothing was submitted (capability absent, or a pre-submission
+            // rejection such as "method not found").
+            if (state.eip1193Provider &&
+                (await supportsSendCalls(state.eip1193Provider, chainIdHex, walletAddress))) {
+                let batchSubmitted = false;
+                let batchId = null;
                 try {
-                    if (await supportsSendCalls(state.eip1193Provider, chainIdHex)) {
+                    dispatchBtnText.textContent = 'Confirm in your smart wallet...';
+                    batchId = await sendCalls({
+                        provider: state.eip1193Provider,
+                        from: walletAddress,
+                        chainIdHex,
+                        // ERC20's disperseToken is non-payable: attach value
+                        // only for ETH dispersements, otherwise 0x0.
+                        calls: [{ to: contractAddress, value: token === 'ETH' ? totalAmountBN : 0n, data: callData }]
+                    });
+                    // Resolution means the wallet accepted the batch.
+                    batchSubmitted = true;
+                    if (!batchId) {
+                        throw new Error('Wallet accepted the batch but returned no batch id; it cannot be tracked.');
+                    }
+                    showNotification(`Batch submitted (id ${batchId}). Waiting for confirmation...`, 'info');
+                    const result = await waitForSendCalls({
+                        provider: state.eip1193Provider,
+                        batchId
+                    });
+                    if (result.status === 'CONFIRMED') {
                         usedSmartWallet = true;
-                        dispatchBtnText.textContent = 'Confirm in your smart wallet...';
-                        const batchId = await sendCalls({
-                            provider: state.eip1193Provider,
-                            from: walletAddress,
-                            chainIdHex,
-                            // ERC20's disperseToken is non-payable: attach value
-                            // only for ETH dispersements, otherwise 0x0.
-                            calls: [{ to: contractAddress, value: token === 'ETH' ? totalAmountBN : 0n, data: callData }]
-                        });
-                        showNotification(`Batch submitted (id ${batchId}). Waiting for confirmation...`, 'info');
-                        const result = await waitForSendCalls({
-                            provider: state.eip1193Provider,
-                            batchId
-                        });
-                        if (result.status === 'CONFIRMED') {
-                            txHash = result.txHashes?.[0] || null;
-                        } else if (result.status === 'CANCELLED') {
-                            throw Object.assign(new Error('Transaction rejected by user.'), { code: 4001 });
-                        } else {
-                            throw new Error('Transaction failed on chain. Please check the explorer for details.');
-                        }
+                        txHash = result.txHashes?.[0] || null;
+                    } else if (result.status === 'CANCELLED') {
+                        throw Object.assign(new Error('Transaction rejected by user.'), { code: 4001 });
+                    } else if (result.status === 'PENDING') {
+                        // Poll timeout: the batch is still in flight. Never
+                        // auto-resend — the user must verify before retrying.
+                        throw new Error('Batch is still pending in your wallet. Do not submit again — verify in your wallet or the explorer before any retry.');
+                    } else {
+                        // FAILED / UNKNOWN: the batch was submitted and did
+                        // not confirm. Surface it; never auto-resend.
+                        throw new Error('The batch was not confirmed. Check your wallet or the explorer before retrying — do not resubmit without verifying.');
                     }
                 } catch (scError) {
-                    // User rejections are always surfaced. Any other failure falls
-                    // back to the standard signer path so EOA-style wallets still work.
-                    if (scError?.code === 'ACTION_REJECTED' || scError?.code === 4001) throw scError;
-                    console.warn('wallet_sendCalls path failed, falling back to standard path:', scError);
-                    usedSmartWallet = false;
-                    txHash = null;
+                    const decision = classifySendCallsError(scError, { submitted: batchSubmitted });
+                    if (decision === 'reject') throw scError;
+                    if (decision === 'abort') {
+                        throw new Error(`Smart-wallet dispatch could not be verified: ${describeError(scError, { abi: CONTRACT_ABI, action: 'transaction' })} Verify in your wallet whether the batch was submitted before retrying.`);
+                    }
+                    // 'fallback': the wallet does not implement EIP-5792 (or
+                    // rejected our params before submitting anything). The
+                    // standard signer path is safe.
+                    console.warn('wallet_sendCalls not usable by this wallet; using standard path:', scError);
                 }
             }
 

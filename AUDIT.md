@@ -12,6 +12,50 @@ The items marked **✅ FIXED** below were addressed after the initial review. Th
 
 > **This document is actively maintained.** For the complementary **principal-software-architect review** (layering, maintainability, single-source-of-truth, testing/CI, resilience), see **[`ARCHITECTURE.md`](ARCHITECTURE.md)**.
 
+### Second external audit (EIP-5792 layer) — ✅ ADDRESSED
+
+An independent audit of the Base Account / EIP-5792 integration found that the
+dispatcher was written against an older draft of the spec and — worse — could
+**double-send** a batch. All findings were verified against the final EIP-5792
+spec and fixed:
+
+1. **Double-send after `wallet_sendCalls` — FIXED.** The old code fell through
+   to a second `signer.sendTransaction` on *any* non-rejection error, including
+   after the batch had already been submitted (status-poll timeout was treated
+   as "failed on chain"). Now: once `wallet_sendCalls` resolves, the batch is
+   with the wallet and is **never** resubmitted. Poll timeout → "pending in your
+   wallet, do not resubmit"; FAILED/UNKNOWN → surface, no auto-retry. Fallback
+   to the signer path happens only when `classifySendCallsError()` proves
+   nothing was submitted (capability absent / method-not-found / pre-submission
+   validation errors — the exact case the spec's Backwards-Compatibility
+   section sanctions). The decision table is unit-tested.
+2. **Wrong spec shapes — FIXED.** `wallet_getCapabilities` now receives
+   `[account, [chainIdHex]]` and checks `atomic.status === 'supported' |
+   'ready'` (per-chain or the `0x0` global; legacy draft booleans tolerated;
+   the hardcoded `0x2105` cross-chain fallback is gone). `wallet_sendCalls`
+   sends an **app-provided `id`** and reads `result.id` (legacy `batchId`
+   tolerated). `wallet_getCallsStatus` uses the spec's **numeric** status codes
+   (1xx/2xx/4xx/5xx/6xx; legacy strings tolerated), with 5730 → UNKNOWN.
+3. **Wrong `chainIdHex` in `chains.json` — FIXED.** Base `0x2141` → `0x2105`,
+   Avalanche `0xa882` → `0xa86a`. `scripts/check-chains.mjs` now asserts
+   `parseInt(chainIdHex, 16) === chainId` so this class of drift fails CI.
+4. **`handleDispatch` burn-gate re-check — FIXED.** The dispatch handler now
+   re-runs `findBurnRecipients` + `burnConfirmed` (defense in depth on top of
+   the UI gate), like the `MAX_RECIPIENTS` check.
+5. **Token symbol XSS — FIXED.** `symbol()` output is contract-controlled and
+   was interpolated raw into `innerHTML` in two places; both now go through
+   `escapeHtml` (unit-tested).
+6. **`package-lock.json` restored** — reproducible `npm ci` for a fund-moving
+   app with `^`-ranged dependencies.
+7. **"Fallback RPC" was not a fallback — FIXED.** `createFallbackProvider`
+   built one provider from `urls[0]` only; it now returns the full ordered
+   provider list and `readWithFallback` fails over across endpoints.
+8. **Burn-warning total now exact** (scaled-BigInt decimal sum) — no float
+   artifacts in the security-critical confirmation panel (see item 12).
+9. **Docs made honest** — README/ARCHITECTURE no longer claim CI is running on
+   GitHub (the workflow is written but held locally: the automation account
+   lacks the `workflows` permission); AUDIT item 4 (debounce) marked done.
+
 ---
 
 ## Verdict in one line
@@ -47,8 +91,8 @@ FarSend is a clean, well-structured **frontend-only** batch-sender app. The clie
 ### 3. Fallback gas-limit path broadcasts a guaranteed-revert tx — ✅ FIXED
 `handleDispatch` now treats `estimateGas` failure as **fatal** (except `ACTION_REJECTED`) and no longer broadcasts a manual-gas fallback that would burn the user's gas on a guaranteed revert.
 
-### 4. `updateSummary()` is async and fires `checkAndPromptApproval()` on every change — ⏳ OPEN
-Every keystroke still triggers a live `allowance()` RPC call. This is a remaining performance/UX improvement (debounce + generation token), but not a safety bug.
+### 4. `updateSummary()` is async and fires `checkAndPromptApproval()` on every change — ✅ FIXED
+`updateSummary` is debounced (`src/core/debounce.js`) and every async run is stamped with a generation token: when the user switches chain/token or edits recipients, stale in-flight allowance/summary results are dropped, so out-of-order RPC responses can no longer clobber fresh state.
 
 ### 5. Zero-address recipients — ✅ FIXED (now a first-class "burn" flow)
 `ethers.getAddress(0x0…)` still succeeds, but sending to a burn/dead address now requires an explicit confirmation (see the new Burn/Dead Address feature below), so funds can't be silently burned.
@@ -78,8 +122,8 @@ Removed the redundant/empty `subscribeProviders` registration in the initial-loa
 - Reown `projectId` `0c80bc29…` is hardcoded in source. A WalletConnect projectId isn't a secret, but it should live in an env var and the README's `.env` story is aspirational.
 - `window.appKit` and `window.confetti` are intentionally global — fine, but worth noting as a small attack surface if the page ever runs untrusted third-party scripts.
 
-### 12. Float math in display paths
-`updateSummary` and the random-distribution tool sum amounts with `parseFloat`/`toFixed`. This is **display-only** — actual dispatch uses `BigInt` via `parseUnits`, so sent amounts are exact. But the UI total can differ from the exact wei the user is about to send; show a precise total and let the user confirm the exact amount in the final step.
+### 12. Float math in display paths — ✅ burn total now exact
+The security-critical **burn-warning total** now sums decimal strings exactly (scaled BigInt in `burnTotal`), so the confirmation panel shows precise amounts. The remaining `parseFloat` usages (summary total, random-distribution tool, input validation) are display/input-only — actual dispatch uses `BigInt` via `parseUnits`, so sent amounts are exact.
 
 ### 13. `chains.json` is served from `/` but referenced as `/chains.json`
 Minor routing note: with `vercel.json` redirecting `/` to `splash.html`, and `vite.config.js` using `publicDir: 'public'`, the config file lands at `/chains.json` in `dist` — confirm the Vercel build copies `public/chains.json` to the root correctly (the manualChunks/two-page build makes this worth a quick smoke test after deploy).
@@ -113,4 +157,4 @@ Minor routing note: with `vercel.json` redirecting `/` to `splash.html`, and `vi
 2. ✅ **Gas-estimation failure now fatal** — no more guaranteed-revert broadcasts.
 3. ✅ **Max-recipient cap (500) + burn/dead-address confirmation** added.
 4. ⏳ **Debounce `updateSummary`** so allowance checks aren't fired on every keystroke.
-5. **Cleanup (minor):** remove `indexold.html`, fix the dead `webhookUrl` in `farcaster.json` (points at a non-existent `/api/webhook`), and add the missing `LICENSE` file the README references.
+5. **Cleanup (minor):** remove `indexold.html` — ✅ done; fix the dead `webhookUrl` in `farcaster.json` (points at a non-existent `/api/webhook`) — ⏸️ intentionally skipped per request; add the missing `LICENSE` file the README references — ⏳ still open.

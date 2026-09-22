@@ -57,6 +57,15 @@ for (const [key, chain] of Object.entries(chains || {})) {
     if (id !== Number(chain.chainId)) {
         errors.push(`chain ${key}: chainId field (${chain.chainId}) does not match key (${id})`);
     }
+    // chainIdHex is load-bearing for EIP-5792 wallet_sendCalls (which takes a
+    // hex chain id). A wrong value would submit the batch on the wrong chain
+    // or be rejected, so it must exactly match the numeric chain id.
+    const expectedHex = `0x${id.toString(16)}`;
+    if (typeof chain.chainIdHex !== 'string') {
+        errors.push(`chain ${key}: missing "chainIdHex"`);
+    } else if (parseInt(chain.chainIdHex, 16) !== id) {
+        errors.push(`chain ${key}: chainIdHex (${chain.chainIdHex}) does not match chainId ${id} (expected ${expectedHex})`);
+    }
 }
 
 // Drift guard vs. AppKit networks.

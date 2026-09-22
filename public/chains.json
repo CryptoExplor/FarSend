@@ -4,7 +4,7 @@
       "name": "Base",
       "shortName": "base",
       "chainId": 8453,
-      "chainIdHex": "0x2141",
+      "chainIdHex": "0x2105",
       "rpcUrl": "https://mainnet.base.org",
       "explorerUrl": "https://basescan.org",
       "nativeCurrency": {
@@ -89,7 +89,7 @@
       "name": "Avalanche C-Chain",
       "shortName": "avax",
       "chainId": 43114,
-      "chainIdHex": "0xa882",
+      "chainIdHex": "0xa86a",
       "rpcUrl": "https://api.avax.network/ext/bc/C/rpc",
       "explorerUrl": "https://snowtrace.io",
       "nativeCurrency": {

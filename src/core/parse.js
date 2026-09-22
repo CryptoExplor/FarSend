@@ -93,6 +93,27 @@ function parseText(data) {
  * @param {number} decimals
  * @returns {{ recipients: Array<{address:string, amount:string}>, errorCount: number }}
  */
+/**
+ * Escape a string for safe interpolation into innerHTML.
+ *
+ * Token symbols/decimals are read from on-chain contracts and are therefore
+ * untrusted input; interpolating them raw into HTML would allow a malicious
+ * token to inject markup/script (stored XSS). Use this before any innerHTML
+ * interpolation of contract-derived strings.
+ *
+ * @param {*} value
+ * @returns {string}
+ */
+export function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[ch]));
+}
+
 export function validateRecipients(entries, decimals) {
     const recipients = [];
     let errorCount = 0;
