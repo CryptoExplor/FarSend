@@ -55,6 +55,12 @@ spec and fixed:
 9. **Docs made honest** — README/ARCHITECTURE no longer claim CI is running on
    GitHub (the workflow is written but held locally: the automation account
    lacks the `workflows` permission); AUDIT item 4 (debounce) marked done.
+10. **CONFIRMED with empty receipts** treated as success (form cleared, Dispatch
+    cannot be clicked again). Message: "confirmed in your wallet".
+11. **Toast XSS closed.** `showNotification` assigns the message via
+    `textContent`; the only HTML is our trusted SVG icons plus an optional
+    explorer `<a>` built from `txExplorerHref` (https explorer + 32-byte hex
+    hash). Token symbols in toasts are escaped by construction.
 
 ---
 

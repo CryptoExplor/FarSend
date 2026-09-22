@@ -310,20 +310,68 @@ function initializeApp() {
         info: { bg: '#eff6ff', fg: '#1E40AF', border: '#93C5FD', iconBg: 'rgba(59,130,246,0.14)' }
     };
 
-    function showNotification(message, type = 'success') {
+    // Build a https explorer /tx/ URL only when the hash is a 32-byte hex
+    // string and the base is the current chain's configured explorer. Never
+    // interpolates untrusted strings into hrefs.
+    function txExplorerHref(txHash) {
+        const base = state.currentChain?.explorerUrl;
+        if (typeof base !== 'string' || !/^https:\/\//i.test(base)) return null;
+        if (typeof txHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) return null;
+        return `${base.replace(/\/$/, '')}/tx/${txHash}`;
+    }
+
+    function explorerDisplayName() {
+        const url = state.currentChain?.explorerUrl || '';
+        if (url.includes('basescan')) return 'BaseScan';
+        if (url.includes('etherscan') && url.includes('optimistic')) return 'Optimistic Etherscan';
+        if (url.includes('etherscan')) return 'Etherscan';
+        if (url.includes('arbiscan')) return 'Arbiscan';
+        if (url.includes('bscscan')) return 'BscScan';
+        if (url.includes('snowtrace')) return 'Snowtrace';
+        if (url.includes('polygonscan')) return 'PolygonScan';
+        return 'Explorer';
+    }
+
+    // Toast: the message is always assigned via textContent (token symbols,
+    // revert reasons, and error strings are untrusted). The only HTML in the
+    // toast is (a) our trusted SVG icon constants and (b) an optional
+    // explorer <a> built from txExplorerHref — never from caller-supplied HTML.
+    function showNotification(message, type = 'success', link = null) {
         const s = NOTIFICATION_STYLES[type] || NOTIFICATION_STYLES.info;
-        notification.innerHTML = `
-            <div class="flex items-start gap-3">
-                <span class="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
-                    style="background:${s.iconBg}; color:${s.fg};">
-                    ${NOTIFICATION_ICONS[type] || NOTIFICATION_ICONS.info}
-                </span>
-                <div class="flex-1 min-w-0 text-sm leading-snug">${message}</div>
-            </div>`;
+        notification.replaceChildren();
         notification.className = 'p-3 rounded-xl main-card shadow-lg show';
         notification.style.backgroundColor = s.bg;
         notification.style.color = s.fg;
         notification.style.border = `1px solid ${s.border}`;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'flex items-start gap-3';
+
+        const iconWrap = document.createElement('span');
+        iconWrap.className = 'flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center';
+        iconWrap.style.background = s.iconBg;
+        iconWrap.style.color = s.fg;
+        iconWrap.innerHTML = NOTIFICATION_ICONS[type] || NOTIFICATION_ICONS.info;
+
+        const body = document.createElement('div');
+        body.className = 'flex-1 min-w-0 text-sm leading-snug';
+        body.textContent = String(message ?? '');
+        const href = link?.href;
+        const label = link?.label;
+        if (typeof href === 'string' && href.startsWith('https://') && label) {
+            body.appendChild(document.createTextNode(' '));
+            const a = document.createElement('a');
+            a.href = href;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.className = 'font-bold underline';
+            a.style.color = '#582FD6';
+            a.textContent = String(label);
+            body.appendChild(a);
+        }
+
+        wrap.append(iconWrap, body);
+        notification.appendChild(wrap);
         setTimeout(() => notification.classList.remove('show'), 8000);
     }
 
@@ -605,8 +653,10 @@ function initializeApp() {
                 gasLimit: gasLimit
             });
 
-            const explorerUrl = state.currentChain?.explorerUrl || 'https://etherscan.io';
-            showNotification(`Approval transaction sent. Waiting for confirmation: <a href="${explorerUrl}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
+            showNotification('Approval transaction sent. Waiting for confirmation.', 'info', {
+                href: txExplorerHref(tx.hash),
+                label: 'View Tx'
+            });
 
             await tx.wait();
 
@@ -716,7 +766,6 @@ function initializeApp() {
             let txHash = null;
             let usedSmartWallet = false;
             const recipientAddresses = recipients.map(r => r.address);
-            const explorerUrl = state.currentChain?.explorerUrl || 'https://etherscan.io';
 
             // Build the contract call so it can be dispatched either via the smart
             // wallet's wallet_sendCalls (EIP-5792, e.g. Base Account) or via a
@@ -860,7 +909,10 @@ function initializeApp() {
                     }
                 }
 
-                showNotification(`Batch transaction sent! Waiting for confirmation: <a href="${explorerUrl}/tx/${tx.hash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View Tx</a>`, 'info');
+                showNotification('Batch transaction sent! Waiting for confirmation.', 'info', {
+                    href: txExplorerHref(tx.hash),
+                    label: 'View Tx'
+                });
 
                 const receipt = await tx.wait();
 
@@ -872,17 +924,22 @@ function initializeApp() {
             }
 
             // Shared success handling (works for both dispatch paths).
-            if (txHash) {
-                const explorerName = state.currentChain?.explorerUrl?.includes('basescan') ? 'BaseScan' :
-                    state.currentChain?.explorerUrl?.includes('etherscan') ? 'Etherscan' :
-                        state.currentChain?.explorerUrl?.includes('optimistic') ? 'Optimistic Etherscan' :
-                            state.currentChain?.explorerUrl?.includes('arbiscan') ? 'Arbiscan' :
-                                state.currentChain?.explorerUrl?.includes('bscscan') ? 'BscScan' :
-                                    state.currentChain?.explorerUrl?.includes('snowtrace') ? 'Snowtrace' :
-                                        state.currentChain?.explorerUrl?.includes('polygonscan') ? 'PolygonScan' : 'Explorer';
-                const message = `Batch of ${recipients.length} transfers confirmed.<br>
-                                <a href="${explorerUrl}/tx/${txHash}" target="_blank" class="font-bold underline" style="color: #582FD6;">View on ${explorerName}</a>`;
-                showNotification(message, 'success');
+            // CONFIRMED with an empty receipts array (spec-legal) is still
+            // success: never skip this block, or Dispatch re-enables with the
+            // form intact and a second click would re-send.
+            if (txHash || usedSmartWallet) {
+                if (txHash) {
+                    showNotification(
+                        `Batch of ${recipients.length} transfers confirmed.`,
+                        'success',
+                        { href: txExplorerHref(txHash), label: `View on ${explorerDisplayName()}` }
+                    );
+                } else {
+                    showNotification(
+                        `Batch of ${recipients.length} transfers confirmed in your wallet. Check your wallet or the explorer before sending again.`,
+                        'success'
+                    );
+                }
 
                 if (window.confetti) {
                     window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
