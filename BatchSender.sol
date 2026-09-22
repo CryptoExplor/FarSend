@@ -3,8 +3,14 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @title BaseBatchSender
-/// @notice Batch-send ETH and ERC-20 tokens
+/// @title BatchSender
+/// @notice Batch-send ETH and ERC-20 tokens to multiple recipients in one transaction
+/// @dev This is the canonical contract. It is intentionally immutable and stateless:
+///      it has no owner, no upgrade path, and no withdraw function. It can never
+///      move funds except to the exact recipients the caller specifies, which makes
+///      it safe for users to send to. Deploy once per chain; the ABI is identical
+///      across all deployments (see public/chains.json), so every address works with
+///      the same frontend without redeploying existing chains.
 contract BatchSender {
     /// @notice Batch-send native ETH to multiple recipients
     /// @param recipients List of recipient addresses

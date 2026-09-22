@@ -21,6 +21,8 @@ FarSend is a web-based batch sender that enables users to send ETH and ERC-20 to
 
 ### 🔗 Wallet Integration
 - Connect with any Web3 wallet via Reown AppKit
+- **Base Account (smart wallet)** — the passkey ERC-4337 wallet behind the Base App; featured first in the wallet modal and connects through the same Reown flow
+- **EIP-5792 wallet_sendCalls** — when a Base Account (or other smart wallet) is connected, batch dispatch runs through `wallet_sendCalls` for atomic, bundler-handled gas; falls back to standard `signer.sendTransaction` for EOA wallets
 - Non-custodial — your keys never leave your wallet
 - Direct wallet-to-wallet transfers
 - Automatic network detection and switching to Base
@@ -75,6 +77,7 @@ FarSend is a web-based batch sender that enables users to send ETH and ERC-20 to
 - **Frontend**: Vanilla HTML/CSS/JavaScript with Tailwind CSS
 - **Web3 Library**: Ethers.js v6
 - **Wallet Connection**: Reown AppKit (formerly WalletConnect)
+- **Smart Wallet**: Base Account (passkey ERC-4337) — featured via Reown `featuredWalletIds`; dispatch via EIP-5792 `wallet_sendCalls` with signer fallback
 - **Blockchain**: Base (Ethereum L2) - Chain ID 8453
 - **Smart Contract**: Custom BaseBatchSender for gas-optimized batch transfers
 - **Social Layer**: Farcaster Mini App SDK
@@ -84,15 +87,18 @@ FarSend is a web-based batch sender that enables users to send ETH and ERC-20 to
 
 ## Smart Contract
 
-FarSend uses a deployed batch sender contract on Base Mainnet:
-
-**Contract Address**: `0x8878b70a01bdda92ab8ea48dd7893b64c69298c0`
+FarSend uses a batch sender contract that is deployed once per supported chain. The full source is in **[`BatchSender.sol`](BatchSender.sol)** — the standard, stateless "Disperse" pattern with **no owner, no upgrade path, and no withdraw function**, so it can only ever move funds to the exact recipients the caller specifies.
 
 **Functions**:
-- `disperseEther(address[] recipients, uint256[] amounts)` - Batch send ETH
+- `disperseEther(address[] recipients, uint256[] amounts)` - Batch send ETH (payable, refunds leftover)
 - `disperseToken(address token, address[] recipients, uint256[] amounts)` - Batch send ERC-20 tokens
 
-[View on BaseScan](https://basescan.org/address/0x8878b70a01bdda92ab8ea48dd7893b64c69298c0)
+Per-chain addresses are defined in `public/chains.json`. The ABI is identical across all deployments, so:
+
+- Existing chains do **not** need to be redeployed.
+- To support a new chain, simply deploy the same `BatchSender.sol` on it and add its address + RPC to `public/chains.json` — no frontend code change required.
+
+**Base Mainnet**: `0x8878b70a01bdda92ab8ea48dd7893b64c69298c0` — [View on BaseScan](https://basescan.org/address/0x8878b70a01bdda92ab8ea48dd7893b64c69298c0)
 
 ---
 
@@ -164,6 +170,18 @@ Address,Amount
 
 ## Development
 
+### Testing & Code Quality
+
+The core logic is extracted into pure, unit-tested modules under `src/core/` (no DOM/wallet dependencies). Run them locally:
+
+```bash
+npm test              # unit tests (Vitest)
+npm run check:chains  # validate chains.json + drift vs AppKit networks
+npm run build         # production build
+```
+
+A CI workflow (`npm ci` → `node --check` → `npm run check:chains` → `npm test` → `npm run build`) is ready at `.github/workflows/ci.yml` but **not yet active on GitHub** — the automation account used for this branch lacks the `workflows` permission, so the file is held locally. Run the same pipeline locally with the commands above until it lands.
+
 ### Local Setup
 
 1. Clone the repository
@@ -188,14 +206,25 @@ php -S localhost:8000
 
 ### Configuration
 
-The app automatically loads the Base contract configuration from `base.json`:
+The app loads the chain + contract configuration from `public/chains.json`:
 
 ```json
 {
-  "address": "0x8878b70a01bdda92ab8ea48dd7893b64c69298c0",
+  "chains": {
+    "8453": {
+      "name": "Base",
+      "chainId": 8453,
+      "rpcUrl": "https://mainnet.base.org",
+      "explorerUrl": "https://basescan.org",
+      "nativeCurrency": { "symbol": "ETH", "decimals": 18 },
+      "contractAddress": "0x8878b70a01bdda92ab8ea48dd7893b64c69298c0"
+    }
+  },
   "abi": [...]
 }
 ```
+
+Add a new chain by appending an entry (with the same ABI) and deploying `BatchSender.sol` there.
 
 ### Deployment
 
