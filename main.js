@@ -157,7 +157,6 @@ function initializeApp() {
 
     // --- DOM Elements ---
     const connectWalletBtn = document.getElementById('connectWalletBtn');
-    const baseAccountBtn = document.getElementById('baseAccountBtn');
     const appContent = document.getElementById('app-content');
     const chainSelector = document.getElementById('chainSelector');
     chainSelector.disabled = true; // Disabled until wallet connects
@@ -464,36 +463,6 @@ function initializeApp() {
         } else {
             // If not connected, initiate connection
             handleConnect();
-        }
-    }
-
-    // Sign in with Base Account. Base Account is already featured in the AppKit
-    // modal via featuredWalletIds, so opening the connect view surfaces it first.
-    // If the wallet is already connected this simply opens the modal to switch
-    // accounts/wallets.
-    async function handleBaseAccountConnect() {
-        baseAccountBtn.disabled = true;
-        baseAccountBtn.innerHTML = `<span class="animate-pulse text-[#0052FF] font-bold">Connecting with Base...</span>`;
-
-        try {
-            await ensureAppKit();
-            await window.appKit.open({ view: 'Connect', namespace: 'eip155' });
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            if (state.isWalletConnected && state.walletAddress) {
-                const truncatedAddress = `${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}`;
-                showNotification(`Connected with Base Account: ${truncatedAddress}`, 'success');
-            }
-        } catch (error) {
-            console.error('Base Account connection error:', error);
-            showNotification(`Base Account connection failed: ${describeError(error, { action: 'connection', fallback: 'please try again.' })}`, 'error');
-        } finally {
-            baseAccountBtn.innerHTML = `
-                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                    <path d="M12 2a8.6 8.6 0 0 1 8.6 8.6c0 .6-.1 1.2-.3 1.8l.7 3.4a1.5 1.5 0 0 1-1.5 1.8H14.9a5.4 5.4 0 0 1-5.3-4.3 2.9 2.9 0 0 1 2.8-3.6 2.8 2.8 0 0 1 2.8 2.9 2.9 2.9 0 0 1-.4 1.5l4.2-1.6a8.6 8.6 0 0 0-7-7.3L12 2zm0 20c-2 0-3.6-.6-4.7-1.7L3 20l.3-4.3A8.6 8.6 0 0 1 12 22zm-2.4-11.5A4.6 4.6 0 0 0 12 6.5a4.6 4.6 0 0 0 2.4 4c-.8-.6-1.3-1.4-1.5-2.3-.2.9-.7 1.7-1.5 2.3z" />
-                </svg>
-                <span>Sign in with Base Account</span>`;
-            baseAccountBtn.disabled = false;
         }
     }
 
@@ -1161,7 +1130,6 @@ function initializeApp() {
     });
 
     connectWalletBtn.addEventListener('click', handleConnectClick);
-    baseAccountBtn.addEventListener('click', handleBaseAccountConnect);
     approveBtn.addEventListener('click', handleApprove);
     dispatchBtn.addEventListener('click', handleDispatch);
 

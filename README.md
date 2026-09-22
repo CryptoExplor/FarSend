@@ -21,7 +21,7 @@ FarSend is a web-based batch sender that enables users to send ETH and ERC-20 to
 
 ### 🔗 Wallet Integration
 - Connect with any Web3 wallet via Reown AppKit
-- **Base Account (smart wallet)** — dedicated "Sign in with Base Account" button; Base Account is featured first in the wallet modal (passkey, ERC-4337)
+- **Base Account (smart wallet)** — the passkey ERC-4337 wallet behind the Base App; featured first in the wallet modal and connects through the same Reown flow
 - **EIP-5792 wallet_sendCalls** — when a Base Account (or other smart wallet) is connected, batch dispatch runs through `wallet_sendCalls` for atomic, bundler-handled gas; falls back to standard `signer.sendTransaction` for EOA wallets
 - Non-custodial — your keys never leave your wallet
 - Direct wallet-to-wallet transfers
